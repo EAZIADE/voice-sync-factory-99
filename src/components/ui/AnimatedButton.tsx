@@ -7,12 +7,14 @@ interface AnimatedButtonProps extends React.ButtonHTMLAttributes<HTMLButtonEleme
   children: React.ReactNode;
   className?: string;
   variant?: "default" | "gradient" | "outline" | "ghost";
+  size?: "default" | "sm" | "lg" | "icon"; // Added the size prop
 }
 
 export const AnimatedButton = ({
   children,
   className,
   variant = "default",
+  size = "default", // Default value for size
   ...props
 }: AnimatedButtonProps) => {
   const getVariantClasses = () => {
@@ -35,6 +37,7 @@ export const AnimatedButton = ({
         getVariantClasses(),
         className
       )}
+      size={size} // Pass the size prop to the Button component
       {...props}
     >
       {children}

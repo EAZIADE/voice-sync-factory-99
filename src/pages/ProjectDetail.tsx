@@ -94,7 +94,12 @@ const ProjectDetail = () => {
         if (error) throw error;
         
         if (data && data.status !== project.status) {
-          setProject(prev => prev ? { ...prev, ...data } : null);
+          const validStatus: 'draft' | 'processing' | 'completed' = 
+            data.status === 'draft' || data.status === 'processing' || data.status === 'completed' 
+              ? data.status 
+              : 'draft';
+              
+          setProject(prev => prev ? { ...prev, status: validStatus, updated_at: data.updated_at } : null);
           
           if (data.status === 'completed') {
             toast({
@@ -139,11 +144,14 @@ const ProjectDetail = () => {
       });
       
       // Update the local project state
-      setProject(prev => prev ? { 
-        ...prev, 
-        status: 'processing',
-        updated_at: new Date().toISOString()
-      } : null);
+      setProject(prev => {
+        if (!prev) return null;
+        return { 
+          ...prev, 
+          status: 'processing' as 'draft' | 'processing' | 'completed',
+          updated_at: new Date().toISOString()
+        };
+      });
       
     } catch (error) {
       console.error("Error generating podcast:", error);
@@ -167,7 +175,9 @@ const ProjectDetail = () => {
       <div className="min-h-screen bg-background">
         <Header />
         <div className="pt-32 pb-16 px-4 max-w-7xl mx-auto">
-          <GlassPanel className="h-96 animate-pulse" />
+          <GlassPanel className="h-96 animate-pulse">
+            <div></div>
+          </GlassPanel>
         </div>
       </div>
     );

@@ -76,7 +76,10 @@ const Dashboard = () => {
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[...Array(3)].map((_, i) => (
-                <GlassCard key={i} className="h-64 animate-pulse" />
+                <GlassCard key={i} className="h-64 animate-pulse">
+                  {/* Empty placeholder div */}
+                  <div></div>
+                </GlassCard>
               ))}
             </div>
           ) : projects.length === 0 ? (
@@ -118,12 +121,12 @@ const Dashboard = () => {
                     
                     <div className="flex space-x-2">
                       <Link to={`/project/${project.id}`}>
-                        <AnimatedButton variant="outline" size="sm">
+                        <AnimatedButton variant="outline">
                           View
                         </AnimatedButton>
                       </Link>
                       {project.status === 'completed' && (
-                        <AnimatedButton variant="gradient" size="sm">
+                        <AnimatedButton variant="gradient">
                           Download
                         </AnimatedButton>
                       )}
