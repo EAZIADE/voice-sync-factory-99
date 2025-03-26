@@ -18,6 +18,9 @@ serve(async (req: Request) => {
     // Get the request body
     const { projectId, characterControls } = await req.json();
     
+    console.log("Request received for project:", projectId);
+    console.log("With character controls:", characterControls);
+    
     // Get the authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {

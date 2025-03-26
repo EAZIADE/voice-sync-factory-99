@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -121,9 +122,10 @@ const ProjectDetail = () => {
     setIsGenerating(true);
     
     try {
+      // Fix: Use the correct URL format with the Supabase project URL
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
       
-      const response = await fetch(`${supabaseUrl}/functions/v1/generate-podcast`, {
+      const response = await fetch(`${supabaseUrl}/functions/generate-podcast`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -142,8 +144,9 @@ const ProjectDetail = () => {
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate podcast');
+        const errorText = await response.text();
+        console.error("Error response:", errorText);
+        throw new Error(errorText || 'Failed to generate podcast');
       }
       
       const data = await response.json();
