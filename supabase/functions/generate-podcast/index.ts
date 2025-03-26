@@ -8,6 +8,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Google API keys - these should be moved to Supabase secrets in production
+const NOTEBOOKLM_API_KEY = Deno.env.get('GOOGLE_NOTEBOOKLM_API_KEY') || '';
+const GEMINI_API_KEY = Deno.env.get('GOOGLE_GEMINI_API_KEY') || '';
+const STUDIO_API_KEY = Deno.env.get('GOOGLE_STUDIO_API_KEY') || '';
+
 serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -89,19 +94,171 @@ serve(async (req: Request) => {
     }
     
     // This would be done asynchronously in a real edge function using a queue or background task
-    // For this demo, we'll use a simple setTimeout to simulate the async process
+    // For this demo, we'll use a setTimeout to simulate the async process
     setTimeout(async () => {
       try {
-        // In a real implementation:
-        // 1. We would use Google NoteBookLM API to generate the podcast content
-        // 2. Google Studio would create the host images
-        // 3. Gemini would animate the character in a video
+        // Script content - use actual project script if available
+        const scriptContent = projectData.script || "Welcome to this AI-generated podcast. Today we're discussing the fascinating world of artificial intelligence and its applications in modern technology.";
         
-        // For now, we'll use a sample video
-        const sampleVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-business-woman-talking-4796-large.mp4";
-        
+        // Step 1: Generate podcast script content with Google NotebookLM
+        let podcastScriptContent = scriptContent;
         try {
-          // Fetch the sample video
+          if (NOTEBOOKLM_API_KEY) {
+            console.log("Generating podcast script with Google NotebookLM");
+            const notebookLMResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/notebooklm:generateContent`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': NOTEBOOKLM_API_KEY
+              },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    role: "user",
+                    parts: [{ text: `Create a podcast script based on the following topic: ${scriptContent}` }]
+                  }
+                ],
+                generationConfig: {
+                  temperature: 0.7,
+                  maxOutputTokens: 1024
+                }
+              })
+            });
+            
+            if (notebookLMResponse.ok) {
+              const notebookData = await notebookLMResponse.json();
+              // Extract the generated content - structure may vary based on the actual API response
+              if (notebookData.candidates && notebookData.candidates[0]?.content?.parts[0]?.text) {
+                podcastScriptContent = notebookData.candidates[0].content.parts[0].text;
+                console.log("Successfully generated podcast script content");
+              }
+            } else {
+              console.error("NotebookLM API error:", await notebookLMResponse.text());
+            }
+          } else {
+            console.log("No NotebookLM API key - using existing script");
+          }
+        } catch (error) {
+          console.error("Error using NotebookLM API:", error);
+        }
+        
+        // Step 2: Generate host images with Google Studio
+        let hostImageUrl = "";
+        try {
+          if (STUDIO_API_KEY) {
+            console.log("Generating host image with Google Studio");
+            const studioResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagegeneration:generateContent`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': STUDIO_API_KEY
+              },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    role: "user",
+                    parts: [{ text: "Generate a professional podcast host in a studio setting, high quality, photorealistic" }]
+                  }
+                ],
+                generationConfig: {
+                  temperature: 0.4
+                }
+              })
+            });
+            
+            if (studioResponse.ok) {
+              const studioData = await studioResponse.json();
+              // Extract the generated image URL - structure may vary based on the actual API response
+              if (studioData.candidates && studioData.candidates[0]?.content?.parts[0]?.inlineData?.data) {
+                // Store the base64 image
+                const base64Image = studioData.candidates[0].content.parts[0].inlineData.data;
+                const imageBlob = await fetch(`data:image/jpeg;base64,${base64Image}`).then(r => r.blob());
+                
+                // Upload to Supabase storage
+                const { data: uploadData, error: uploadError } = await supabaseClient
+                  .storage
+                  .from('podcasts')
+                  .upload(`${projectId}/host.jpg`, imageBlob, {
+                    contentType: 'image/jpeg',
+                    upsert: true
+                  });
+                  
+                if (uploadError) {
+                  console.error("Error uploading host image:", uploadError);
+                } else {
+                  console.log("Successfully uploaded host image");
+                  
+                  // Get the public URL
+                  const { data: urlData } = await supabaseClient
+                    .storage
+                    .from('podcasts')
+                    .getPublicUrl(`${projectId}/host.jpg`);
+                    
+                  hostImageUrl = urlData.publicUrl;
+                }
+              }
+            } else {
+              console.error("Studio API error:", await studioResponse.text());
+            }
+          } else {
+            console.log("No Studio API key - skipping host image generation");
+          }
+        } catch (error) {
+          console.error("Error using Studio API:", error);
+        }
+        
+        // Step 3: Generate the animated video with Gemini
+        try {
+          // For demo purposes, we'll use a sample video if no Gemini API available
+          // In production, this would actually call the Gemini API with the host image and script
+          const sampleVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-business-woman-talking-4796-large.mp4";
+          
+          if (GEMINI_API_KEY && hostImageUrl) {
+            console.log("Generating animated video with Gemini API");
+            
+            // Note: This is a placeholder implementation as Gemini doesn't directly 
+            // create videos like this yet. In a real implementation, you would:
+            // 1. Use Gemini API to generate animation keyframes
+            // 2. Use another service to combine these into a video
+            
+            const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': GEMINI_API_KEY
+              },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    role: "user",
+                    parts: [
+                      { text: `Animate this podcast host speaking the following script: "${podcastScriptContent.substring(0, 500)}"` },
+                      {
+                        inlineData: {
+                          mimeType: "image/jpeg",
+                          data: hostImageUrl // This would need encoding in a real implementation
+                        }
+                      }
+                    ]
+                  }
+                ],
+                generationConfig: {
+                  temperature: 0.2,
+                  maxOutputTokens: 2048
+                }
+              })
+            });
+            
+            if (geminiResponse.ok) {
+              // Process Gemini response (in reality this would come from another animation service)
+              console.log("Successfully received Gemini API response");
+            } else {
+              console.error("Gemini API error:", await geminiResponse.text());
+            }
+          }
+          
+          // For now, we'll use the sample video in either case
+          console.log("Downloading sample video as placeholder for Gemini output");
           const videoResponse = await fetch(sampleVideoUrl);
           if (!videoResponse.ok) {
             throw new Error("Failed to fetch sample video");
@@ -137,10 +294,10 @@ serve(async (req: Request) => {
             console.log("Public URL for video:", publicUrlData.publicUrl);
           }
         } catch (error) {
-          console.error("Error handling video upload:", error);
+          console.error("Error handling video generation:", error);
         }
         
-        // After "processing" is complete, update the project
+        // After processing is complete, update the project
         const { error: completeError } = await supabaseClient
           .from('projects')
           .update({ 

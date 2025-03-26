@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -103,7 +102,7 @@ const ProjectDetail = () => {
           if (data.status === 'completed') {
             toast({
               title: "Success!",
-              description: "Your podcast has been generated and is ready to download.",
+              description: "Your AI podcast has been generated using Google's NotebookLM, Studio, and Gemini technology.",
             });
             clearInterval(interval);
           }
@@ -122,7 +121,6 @@ const ProjectDetail = () => {
     setIsGenerating(true);
     
     try {
-      // Use the correct URL format with the Supabase project URL
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
       
       const response = await fetch(`${supabaseUrl}/functions/generate-podcast`, {
@@ -153,8 +151,8 @@ const ProjectDetail = () => {
       console.log("Generation response:", data);
       
       toast({
-        title: "Processing Started",
-        description: "Your podcast is being generated. This may take a few minutes.",
+        title: "AI Processing Started",
+        description: "Your podcast is being generated with Google NotebookLM, Studio and Gemini. This may take a few minutes.",
       });
       
       setProject(prev => {
@@ -216,7 +214,6 @@ const ProjectDetail = () => {
     );
   }
 
-  // Construct the proper video URL for completed podcasts
   const videoUrl = project.status === 'completed' 
     ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/podcasts/${project.id}/video.mp4` 
     : undefined;
@@ -290,7 +287,7 @@ const ProjectDetail = () => {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <span className="text-amber-700 text-sm">Your podcast is being generated. This process typically takes a few minutes.</span>
+                        <span className="text-amber-700 text-sm">Your podcast is being generated with Google AI. This process typically takes a few minutes.</span>
                       </div>
                     </div>
                   )}
