@@ -69,9 +69,6 @@ serve(async (req: Request) => {
     console.log("Starting podcast generation for project:", projectId);
     console.log("Using character controls:", characterControls);
     
-    // In a real implementation, this would be where you'd call your AI/video generation service
-    // For this demo, we'll simulate processing with a delay and then mark as complete
-    
     // Create a storage bucket for podcasts if it doesn't exist
     try {
       const { data: bucketData, error: bucketError } = await supabaseClient
@@ -85,6 +82,7 @@ serve(async (req: Request) => {
             public: true,
             fileSizeLimit: 512000000, // 512MB
           });
+        console.log("Created 'podcasts' bucket");
       }
     } catch (error) {
       console.error("Error ensuring bucket exists:", error);
@@ -94,14 +92,20 @@ serve(async (req: Request) => {
     // For this demo, we'll use a simple setTimeout to simulate the async process
     setTimeout(async () => {
       try {
-        // Upload sample video (this would be a real generated video in production)
-        // In this demo, we're going to use a publicly available video
+        // In a real implementation:
+        // 1. We would use Google NoteBookLM API to generate the podcast content
+        // 2. Google Studio would create the host images
+        // 3. Gemini would animate the character in a video
+        
+        // For now, we'll use a sample video
         const sampleVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-business-woman-talking-4796-large.mp4";
         
         try {
           // Fetch the sample video
           const videoResponse = await fetch(sampleVideoUrl);
-          if (!videoResponse.ok) throw new Error("Failed to fetch sample video");
+          if (!videoResponse.ok) {
+            throw new Error("Failed to fetch sample video");
+          }
           
           const videoBlob = await videoResponse.blob();
           
@@ -119,17 +123,18 @@ serve(async (req: Request) => {
             throw uploadError;
           }
           
-          // Make the uploaded file public
-          const { error: urlError } = await supabaseClient
+          console.log("Successfully uploaded video for project:", projectId);
+          
+          // Make the file publicly accessible
+          const { data: publicUrlData, error: publicUrlError } = await supabaseClient
             .storage
             .from('podcasts')
-            .update(`${projectId}/video.mp4`, videoBlob, {
-              contentType: 'video/mp4',
-              upsert: true
-            });
-          
-          if (urlError) {
-            console.error("Error making video public:", urlError);
+            .getPublicUrl(`${projectId}/video.mp4`);
+            
+          if (publicUrlError) {
+            console.error("Error getting public URL:", publicUrlError);
+          } else {
+            console.log("Public URL for video:", publicUrlData.publicUrl);
           }
         } catch (error) {
           console.error("Error handling video upload:", error);

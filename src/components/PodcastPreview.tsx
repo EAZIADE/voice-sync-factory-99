@@ -30,6 +30,9 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
   // Demo video URL (replace with actual video when available)
   const demoVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-business-woman-talking-4796-large.mp4";
   
+  // Determine video source - ensure it's a valid URL
+  const videoSource = status === 'completed' && previewUrl ? previewUrl : demoVideoUrl;
+  
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
@@ -37,7 +40,18 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
       if (videoRef.current) {
         videoRef.current.play().catch(err => {
           console.error("Error playing video:", err);
-          setIsPlaying(false);
+          // Try loading the demo video if the main one fails
+          if (videoSource !== demoVideoUrl && videoRef.current) {
+            console.log("Falling back to demo video");
+            videoRef.current.src = demoVideoUrl;
+            videoRef.current.load();
+            videoRef.current.play().catch(fallbackErr => {
+              console.error("Error playing fallback video:", fallbackErr);
+              setIsPlaying(false);
+            });
+          } else {
+            setIsPlaying(false);
+          }
         });
       }
       
@@ -67,7 +81,7 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
     }
     
     return () => clearInterval(interval);
-  }, [isPlaying, duration]);
+  }, [isPlaying, duration, videoSource, demoVideoUrl]);
   
   useEffect(() => {
     // Set actual duration when video is loaded
@@ -136,7 +150,7 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
     
     // Simulate download completion or download the actual video
     setTimeout(() => {
-      const videoUrl = previewUrl || demoVideoUrl;
+      const videoUrl = videoSource;
       const a = document.createElement('a');
       a.href = videoUrl;
       a.download = `podcast-${projectId || 'demo'}.mp4`;
@@ -151,8 +165,8 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
     }, 1500);
   };
   
-  // Determine video source
-  const videoSource = status === 'completed' ? (previewUrl || demoVideoUrl) : demoVideoUrl;
+  // Log the current video source for debugging
+  console.log("Current video source:", videoSource);
   
   return (
     <div className="space-y-6">
@@ -169,8 +183,10 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
                 ref={videoRef}
                 className="w-full h-full object-cover"
                 src={videoSource}
+                controls
                 playsInline
-                muted={false}
+                preload="auto"
+                crossOrigin="anonymous"
                 onClick={togglePlayback}
                 onEnded={() => setIsPlaying(false)}
               />

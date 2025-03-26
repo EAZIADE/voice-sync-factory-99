@@ -122,7 +122,7 @@ const ProjectDetail = () => {
     setIsGenerating(true);
     
     try {
-      // Fix: Use the correct URL format with the Supabase project URL
+      // Use the correct URL format with the Supabase project URL
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
       
       const response = await fetch(`${supabaseUrl}/functions/generate-podcast`, {
@@ -216,6 +216,13 @@ const ProjectDetail = () => {
     );
   }
 
+  // Construct the proper video URL for completed podcasts
+  const videoUrl = project.status === 'completed' 
+    ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/podcasts/${project.id}/video.mp4` 
+    : undefined;
+  
+  console.log("Video URL:", videoUrl);
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -236,7 +243,7 @@ const ProjectDetail = () => {
                 projectId={project.id}
                 status={project.status}
                 onGenerateClick={handleGeneratePodcast}
-                previewUrl={project.status === 'completed' ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/podcasts/${project.id}/video.mp4` : undefined}
+                previewUrl={videoUrl}
               />
             </div>
             
