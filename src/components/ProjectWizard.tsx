@@ -1,12 +1,15 @@
 
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
+import { useAuth } from "@/context/AuthContext";
 import { GlassPanel } from "./ui/GlassMorphism";
 import { AnimatedButton } from "./ui/AnimatedButton";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { useToast } from "./ui/use-toast";
+import { createProject } from "@/services/api";
 
 interface ProjectFormData {
   title: string;
@@ -16,6 +19,8 @@ interface ProjectFormData {
 
 const ProjectWizard = () => {
   const { selectedHosts, selectedTemplate, selectedLanguage } = useAppContext();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState<ProjectFormData>({
     title: "",
     description: "",
@@ -29,7 +34,7 @@ const ProjectWizard = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!selectedHosts.length || !selectedTemplate || !selectedLanguage) {
@@ -41,17 +46,47 @@ const ProjectWizard = () => {
       return;
     }
     
-    // In a real app, this would call our createProject API
+    if (!user) {
+      toast({
+        title: "Authentication required",
+        description: "Please sign in to create a project.",
+        variant: "destructive"
+      });
+      navigate("/auth");
+      return;
+    }
+    
     setIsSubmitting(true);
     
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const project = await createProject({
+        user_id: user.id,
+        title: formData.title,
+        description: formData.description || null,
+        script: formData.script || null,
+        selected_hosts: selectedHosts,
+        selected_template: selectedTemplate,
+        selected_language: selectedLanguage,
+        status: 'draft'
+      });
+      
       toast({
         title: "Success!",
-        description: "Your project has been created. You need to be logged in to save it.",
+        description: "Your project has been created.",
       });
+      
+      // Redirect to the dashboard after successful creation
+      navigate(`/project/${project.id}`);
+    } catch (error) {
+      console.error("Error creating project:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create your project. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
       setIsSubmitting(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -130,7 +165,7 @@ const ProjectWizard = () => {
                   type="submit"
                   disabled={isSubmitting || !formData.title || selectedHosts.length === 0 || !selectedTemplate}
                 >
-                  {isSubmitting ? "Creating..." : "Create Project"}
+                  {isSubmitting ? "Creating..." : user ? "Create Project" : "Sign In to Create"}
                 </AnimatedButton>
               </div>
             </div>
