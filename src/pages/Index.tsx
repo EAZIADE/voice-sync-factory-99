@@ -7,10 +7,14 @@ import LanguageSelector from "@/components/LanguageSelector";
 import TemplateGallery from "@/components/TemplateGallery";
 import ScriptEditor from "@/components/ScriptEditor";
 import PreviewSection from "@/components/PreviewSection";
+import ProjectWizard from "@/components/ProjectWizard";
 import { GlassCard } from "@/components/ui/GlassMorphism";
 import { AnimatedButton } from "@/components/ui/AnimatedButton";
+import { useAppContext } from "@/context/AppContext";
 
 const Index = () => {
+  const { isLoading } = useAppContext();
+  
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -20,6 +24,7 @@ const Index = () => {
         <HostSelection />
         <LanguageSelector />
         <TemplateGallery />
+        <ProjectWizard />
         <ScriptEditor />
         <PreviewSection />
         

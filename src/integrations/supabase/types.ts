@@ -9,7 +9,129 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      hosts: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string
+          is_premium: boolean
+          languages: string[]
+          name: string
+          style: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url: string
+          is_premium?: boolean
+          languages: string[]
+          name: string
+          style: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string
+          is_premium?: boolean
+          languages?: string[]
+          name?: string
+          style?: string
+        }
+        Relationships: []
+      }
+      languages: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          is_premium: boolean
+          name: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          is_premium?: boolean
+          name: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          is_premium?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          script: string | null
+          selected_hosts: string[] | null
+          selected_language: string | null
+          selected_template: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          script?: string | null
+          selected_hosts?: string[] | null
+          selected_language?: string | null
+          selected_template?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          script?: string | null
+          selected_hosts?: string[] | null
+          selected_language?: string | null
+          selected_template?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      templates: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          image_url: string
+          is_premium: boolean
+          name: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          image_url: string
+          is_premium?: boolean
+          name: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          image_url?: string
+          is_premium?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
