@@ -327,7 +327,7 @@ serve(async (req: Request) => {
           console.error("Error rolling back project status:", rollbackError);
         }
       }
-    }, 15000); // Simulate a 15 second processing time
+    }, 10000); // Reduce to 10 seconds for faster testing
     
     return new Response(
       JSON.stringify({ 
@@ -341,7 +341,7 @@ serve(async (req: Request) => {
     console.error("Error in generate-podcast function:", error);
     
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error.message || "Unknown error occurred" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

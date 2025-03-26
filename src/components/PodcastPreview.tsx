@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { GlassCard, GlassPanel } from "./ui/GlassMorphism";
 import { AnimatedButton } from "./ui/AnimatedButton";
 import CharacterControls, { CharacterControlState } from "./CharacterControls";
-import { useToast } from "./ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
 interface PodcastPreviewProps {
@@ -17,6 +17,7 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(225); // 3:45 in seconds
+  const [videoError, setVideoError] = useState<string | null>(null);
   const [characterControls, setCharacterControls] = useState<CharacterControlState>({
     expressiveness: 70,
     gestureIntensity: 50,
@@ -30,8 +31,30 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
   // Demo video URL (replace with actual video when available)
   const demoVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-business-woman-talking-4796-large.mp4";
   
-  // Determine video source - ensure it's a valid URL
-  const videoSource = status === 'completed' && previewUrl ? previewUrl : demoVideoUrl;
+  // Determine video source - ensure it's a valid URL with proper validation
+  const videoSource = status === 'completed' && previewUrl && typeof previewUrl === 'string' 
+    ? previewUrl 
+    : demoVideoUrl;
+  
+  useEffect(() => {
+    // Reset video error when source changes
+    setVideoError(null);
+    
+    // When status changes to completed, check if the video is actually available
+    if (status === 'completed' && previewUrl) {
+      fetch(previewUrl, { method: 'HEAD' })
+        .then(response => {
+          if (!response.ok) {
+            console.error("Video URL returned error:", response.status);
+            setVideoError(`Video not available (${response.status})`);
+          }
+        })
+        .catch(err => {
+          console.error("Error checking video URL:", err);
+          setVideoError("Error accessing video source");
+        });
+    }
+  }, [status, previewUrl]);
   
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -40,6 +63,8 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
       if (videoRef.current) {
         videoRef.current.play().catch(err => {
           console.error("Error playing video:", err);
+          setVideoError(`Error playing video: ${err.message}`);
+          
           // Try loading the demo video if the main one fails
           if (videoSource !== demoVideoUrl && videoRef.current) {
             console.log("Falling back to demo video");
@@ -47,6 +72,7 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
             videoRef.current.load();
             videoRef.current.play().catch(fallbackErr => {
               console.error("Error playing fallback video:", fallbackErr);
+              setVideoError(`Error playing fallback video: ${fallbackErr.message}`);
               setIsPlaying(false);
             });
           } else {
@@ -94,13 +120,27 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
       
       videoRef.current.addEventListener('loadedmetadata', handleLoadedMetadata);
       
+      // Also add error handling for the video element
+      const handleError = (e: Event) => {
+        console.error("Video element error:", (e.target as HTMLVideoElement).error);
+        setVideoError("Video playback error - using fallback");
+        
+        if (videoSource !== demoVideoUrl && videoRef.current) {
+          videoRef.current.src = demoVideoUrl;
+          videoRef.current.load();
+        }
+      };
+      
+      videoRef.current.addEventListener('error', handleError);
+      
       return () => {
         if (videoRef.current) {
           videoRef.current.removeEventListener('loadedmetadata', handleLoadedMetadata);
+          videoRef.current.removeEventListener('error', handleError);
         }
       };
     }
-  }, []);
+  }, [videoSource, demoVideoUrl]);
   
   const togglePlayback = () => {
     setIsPlaying(!isPlaying);
@@ -150,9 +190,8 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
     
     // Simulate download completion or download the actual video
     setTimeout(() => {
-      const videoUrl = videoSource;
       const a = document.createElement('a');
-      a.href = videoUrl;
+      a.href = videoSource;
       a.download = `podcast-${projectId || 'demo'}.mp4`;
       document.body.appendChild(a);
       a.click();
@@ -167,6 +206,17 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
   
   // Log the current video source for debugging
   console.log("Current video source:", videoSource);
+
+  // If we have a video error, show a notification
+  useEffect(() => {
+    if (videoError) {
+      toast({
+        title: "Video Playback Issue",
+        description: videoError,
+        variant: "destructive"
+      });
+    }
+  }, [videoError, toast]);
   
   return (
     <div className="space-y-6">
@@ -191,17 +241,23 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
                 onEnded={() => setIsPlaying(false)}
               />
               
-              {(!isPlaying || status === 'processing') && (
+              {(!isPlaying || status === 'processing' || videoError) && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/30 backdrop-blur-sm">
                   <button 
                     className="w-16 h-16 rounded-full bg-primary/80 backdrop-blur-sm flex items-center justify-center transition-transform hover:scale-110 animate-pulse-soft"
                     onClick={togglePlayback}
-                    disabled={status === 'processing'}
+                    disabled={status === 'processing' || !!videoError}
                   >
                     {status === 'processing' ? (
                       <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : videoError ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
                       </svg>
                     ) : (
                       <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
@@ -214,9 +270,11 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
                       ? "Generate podcast to preview" 
                       : status === 'processing' 
                         ? "Processing your podcast..." 
-                        : isPlaying 
-                          ? "Click to pause preview" 
-                          : "Click to play preview"}
+                        : videoError
+                          ? videoError
+                          : isPlaying 
+                            ? "Click to pause preview" 
+                            : "Click to play preview"}
                   </p>
                 </div>
               )}
@@ -250,6 +308,7 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
                           setCurrentTime(videoRef.current.currentTime);
                         }
                       }}
+                      disabled={status === 'processing' || !!videoError}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polygon points="19 20 9 12 19 4 19 20"></polygon>
@@ -259,6 +318,7 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
                     <button 
                       className="p-2 hover:text-primary transition-colors"
                       onClick={togglePlayback}
+                      disabled={status === 'processing' || !!videoError}
                     >
                       {isPlaying ? (
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -279,6 +339,7 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
                           setCurrentTime(videoRef.current.currentTime);
                         }
                       }}
+                      disabled={status === 'processing' || !!videoError}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polygon points="5 4 15 12 5 20 5 4"></polygon>

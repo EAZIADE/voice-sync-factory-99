@@ -5,7 +5,7 @@ import { Project } from "@/types";
 import { GlassPanel } from "@/components/ui/GlassMorphism";
 import { AnimatedButton } from "@/components/ui/AnimatedButton";
 import Header from "@/components/Header";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import PodcastPreview from "@/components/PodcastPreview";
 
@@ -123,7 +123,7 @@ const ProjectDetail = () => {
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
       
-      const response = await fetch(`${supabaseUrl}/functions/generate-podcast`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/generate-podcast`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -214,7 +214,7 @@ const ProjectDetail = () => {
     );
   }
 
-  const videoUrl = project.status === 'completed' 
+  const videoUrl = (project?.status === 'completed' && project?.id)
     ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/podcasts/${project.id}/video.mp4` 
     : undefined;
   
@@ -237,8 +237,8 @@ const ProjectDetail = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
               <PodcastPreview 
-                projectId={project.id}
-                status={project.status}
+                projectId={project?.id}
+                status={project?.status}
                 onGenerateClick={handleGeneratePodcast}
                 previewUrl={videoUrl}
               />
@@ -248,13 +248,13 @@ const ProjectDetail = () => {
               <GlassPanel className="p-6">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h1 className="text-xl font-bold mb-1">{project.title}</h1>
+                    <h1 className="text-xl font-bold mb-1">{project?.title}</h1>
                     <div className="text-muted-foreground text-sm">
-                      {project.description || "No description provided."}
+                      {project?.description || "No description provided."}
                     </div>
                   </div>
                   <div className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm capitalize">
-                    {project.status}
+                    {project?.status || "draft"}
                   </div>
                 </div>
                 
@@ -263,15 +263,15 @@ const ProjectDetail = () => {
                     <h3 className="text-sm font-semibold mb-2">Project Details</h3>
                     <div className="space-y-1 text-sm">
                       <div>
-                        <span className="text-muted-foreground">Created:</span> {new Date(project.created_at || '').toLocaleString()}
+                        <span className="text-muted-foreground">Created:</span> {project?.created_at ? new Date(project.created_at).toLocaleString() : '-'}
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Last Updated:</span> {new Date(project.updated_at || '').toLocaleString()}
+                        <span className="text-muted-foreground">Last Updated:</span> {project?.updated_at ? new Date(project.updated_at).toLocaleString() : '-'}
                       </div>
                     </div>
                   </div>
                   
-                  {project.script && (
+                  {project?.script && (
                     <div>
                       <h3 className="text-sm font-semibold mb-2">Script</h3>
                       <div className="bg-secondary/20 p-3 rounded-md text-sm whitespace-pre-wrap max-h-40 overflow-y-auto">
@@ -280,7 +280,7 @@ const ProjectDetail = () => {
                     </div>
                   )}
                   
-                  {project.status === 'processing' && (
+                  {project?.status === 'processing' && (
                     <div className="bg-amber-500/10 p-4 rounded-md border border-amber-500/20">
                       <div className="flex items-center">
                         <svg className="animate-spin h-5 w-5 mr-3 text-amber-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
