@@ -59,6 +59,7 @@ const ProjectWizard = () => {
     setIsSubmitting(true);
     
     try {
+      // The issue is here - we need to use the language ID, not the language code
       const project = await createProject({
         user_id: user.id,
         title: formData.title,
@@ -66,7 +67,7 @@ const ProjectWizard = () => {
         script: formData.script || null,
         selected_hosts: selectedHosts,
         selected_template: selectedTemplate,
-        selected_language: selectedLanguage,
+        selected_language: selectedLanguage.id, // Fixed: Use the language ID instead of the code
         status: 'draft'
       });
       
@@ -153,7 +154,7 @@ const ProjectWizard = () => {
                 
                 {selectedLanguage && (
                   <div className="bg-primary/10 text-primary rounded-full px-3 py-1 text-sm">
-                    Language: {selectedLanguage.toUpperCase()}
+                    Language: {selectedLanguage.code.toUpperCase()}
                   </div>
                 )}
               </div>
