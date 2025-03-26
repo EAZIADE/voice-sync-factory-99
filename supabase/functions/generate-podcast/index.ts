@@ -1,113 +1,111 @@
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.1"
+// Function to generate AI podcasts with character animation
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.23.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-}
+};
 
-serve(async (req) => {
+serve(async (req: Request) => {
   // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Create a Supabase client with the Auth context of the logged in user
+    // Get the request body
+    const { projectId, characterControls } = await req.json();
+    
+    // Get the authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "No authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Create a Supabase client with the auth header
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
-    )
-
-    // Get the user's ID from their auth token
-    const {
-      data: { user },
-    } = await supabaseClient.auth.getUser()
-
-    if (!user) {
-      throw new Error('User not authenticated')
-    }
-
-    // Get the project ID from the request
-    const { projectId } = await req.json()
+      { global: { headers: { Authorization: authHeader } } }
+    );
     
-    if (!projectId) {
-      throw new Error('Project ID is required')
-    }
-
-    // Get the project details
-    const { data: project, error: projectError } = await supabaseClient
+    // First verify the project exists and belongs to the user
+    const { data: projectData, error: projectError } = await supabaseClient
       .from('projects')
       .select('*')
       .eq('id', projectId)
-      .eq('user_id', user.id)
-      .single()
-
-    if (projectError) {
-      throw projectError
+      .single();
+      
+    if (projectError || !projectData) {
+      console.error("Project error:", projectError);
+      return new Response(
+        JSON.stringify({ error: "Project not found or not authorized" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-
-    if (!project) {
-      throw new Error('Project not found')
-    }
-
-    // Update the project status to 'processing'
-    await supabaseClient
+    
+    // Update project status to processing
+    const { error: updateError } = await supabaseClient
       .from('projects')
       .update({ status: 'processing', updated_at: new Date().toISOString() })
-      .eq('id', projectId)
-
-    // Simulate the podcast generation process
-    // In a real implementation, this would initiate an async process to generate the podcast
-    // For this example, we'll use a simulated delay and then mark the project as completed
+      .eq('id', projectId);
+      
+    if (updateError) {
+      console.error("Update error:", updateError);
+      return new Response(
+        JSON.stringify({ error: "Failed to update project status" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
-    // This part would be handled by a background process in a real implementation
+    console.log("Starting podcast generation for project:", projectId);
+    console.log("Using character controls:", characterControls);
+    
+    // In a real implementation, this would be where you'd call your AI/video generation service
+    // For this demo, we'll simulate processing with a delay and then mark as complete
+    
+    // This would be done asynchronously in a real edge function using a queue or background task
+    // For this demo, we'll use a simple setTimeout to simulate the async process
     setTimeout(async () => {
       try {
-        await supabaseClient
+        // After "processing" is complete, update the project
+        const { error: completeError } = await supabaseClient
           .from('projects')
           .update({ 
             status: 'completed', 
-            updated_at: new Date().toISOString() 
+            updated_at: new Date().toISOString()
           })
-          .eq('id', projectId)
+          .eq('id', projectId);
           
-        console.log(`Project ${projectId} marked as completed`)
+        if (completeError) {
+          console.error("Error completing project:", completeError);
+        } else {
+          console.log("Successfully completed podcast generation for project:", projectId);
+        }
       } catch (error) {
-        console.error(`Error updating project status: ${error.message}`)
+        console.error("Error in background task:", error);
       }
-    }, 30000) // Simulate a 30 second processing time
+    }, 15000); // Simulate a 15 second processing time
     
     return new Response(
       JSON.stringify({ 
-        success: true, 
-        message: 'Podcast generation process started', 
-        projectId 
+        message: "Podcast generation started",
+        projectId: projectId
       }),
-      { 
-        headers: { 
-          ...corsHeaders,
-          'Content-Type': 'application/json' 
-        } 
-      }
-    )
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+    
   } catch (error) {
-    console.error(`Error: ${error.message}`)
+    console.error("Error in generate-podcast function:", error);
+    
     return new Response(
       JSON.stringify({ error: error.message }),
-      { 
-        status: 400, 
-        headers: { 
-          ...corsHeaders,
-          'Content-Type': 'application/json' 
-        } 
-      }
-    )
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
-})
+});
