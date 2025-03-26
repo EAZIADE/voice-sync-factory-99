@@ -78,7 +78,7 @@ const TemplateGallery = () => {
                     selectedTemplate === template.id 
                       ? "ring-2 ring-primary scale-[1.02]" 
                       : "hover:scale-[1.03]",
-                    template.is_premium && !selectedTemplate === template.id && "opacity-75"
+                    template.is_premium && selectedTemplate !== template.id && "opacity-75"
                   )}
                   onClick={() => setSelectedTemplate(template.id)}
                 >

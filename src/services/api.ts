@@ -61,7 +61,10 @@ export const fetchUserProjects = async (userId: string): Promise<Project[]> => {
     throw error;
   }
   
-  return data || [];
+  return (data || []).map(project => ({
+    ...project,
+    status: ensureValidStatus(project.status)
+  }));
 };
 
 export const createProject = async (project: Omit<Project, 'id' | 'created_at' | 'updated_at'>): Promise<Project> => {
@@ -76,7 +79,10 @@ export const createProject = async (project: Omit<Project, 'id' | 'created_at' |
     throw error;
   }
   
-  return data;
+  return {
+    ...data,
+    status: ensureValidStatus(data.status)
+  };
 };
 
 export const updateProject = async (id: string, updates: Partial<Project>): Promise<Project> => {
@@ -92,8 +98,20 @@ export const updateProject = async (id: string, updates: Partial<Project>): Prom
     throw error;
   }
   
-  return data;
+  return {
+    ...data,
+    status: ensureValidStatus(data.status)
+  };
 };
+
+// Helper function to ensure status is one of the valid types
+function ensureValidStatus(status: string): 'draft' | 'processing' | 'completed' {
+  if (status === 'draft' || status === 'processing' || status === 'completed') {
+    return status;
+  }
+  // Default to draft if the status is not one of the expected values
+  return 'draft';
+}
 
 // Helper function to get flag emoji based on language code
 function getLanguageFlag(code: string): string {
