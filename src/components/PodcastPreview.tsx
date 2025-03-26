@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { GlassCard, GlassPanel } from "./ui/GlassMorphism";
 import { AnimatedButton } from "./ui/AnimatedButton";
 import CharacterControls, { CharacterControlState } from "./CharacterControls";
@@ -25,25 +25,68 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
     eyeContact: true,
   });
   const { toast } = useToast();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  
+  // Demo video URL (replace with actual video when available)
+  const demoVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-business-woman-talking-4796-large.mp4";
   
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
     if (isPlaying) {
-      interval = setInterval(() => {
-        setCurrentTime(time => {
-          const newTime = time + 1;
-          if (newTime >= duration) {
-            setIsPlaying(false);
-            return 0;
-          }
-          return newTime;
+      if (videoRef.current) {
+        videoRef.current.play().catch(err => {
+          console.error("Error playing video:", err);
+          setIsPlaying(false);
         });
+      }
+      
+      interval = setInterval(() => {
+        if (videoRef.current) {
+          setCurrentTime(videoRef.current.currentTime);
+          
+          if (videoRef.current.ended) {
+            setIsPlaying(false);
+            clearInterval(interval);
+          }
+        } else {
+          setCurrentTime(time => {
+            const newTime = time + 1;
+            if (newTime >= duration) {
+              setIsPlaying(false);
+              return 0;
+            }
+            return newTime;
+          });
+        }
       }, 1000);
+    } else {
+      if (videoRef.current) {
+        videoRef.current.pause();
+      }
     }
     
     return () => clearInterval(interval);
   }, [isPlaying, duration]);
+  
+  useEffect(() => {
+    // Set actual duration when video is loaded
+    if (videoRef.current) {
+      const handleLoadedMetadata = () => {
+        if (videoRef.current && !isNaN(videoRef.current.duration)) {
+          setDuration(videoRef.current.duration);
+        }
+      };
+      
+      videoRef.current.addEventListener('loadedmetadata', handleLoadedMetadata);
+      
+      return () => {
+        if (videoRef.current) {
+          videoRef.current.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        }
+      };
+    }
+  }, []);
   
   const togglePlayback = () => {
     setIsPlaying(!isPlaying);
@@ -51,7 +94,7 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
   
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
   
@@ -60,6 +103,19 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
     
     // In a real app, we would send these controls to the backend
     console.log("Character controls updated:", newControls);
+  };
+  
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const progressBar = e.currentTarget;
+    const rect = progressBar.getBoundingClientRect();
+    const position = (e.clientX - rect.left) / rect.width;
+    const newTime = position * duration;
+    
+    setCurrentTime(newTime);
+    
+    if (videoRef.current) {
+      videoRef.current.currentTime = newTime;
+    }
   };
   
   const handleDownload = () => {
@@ -78,14 +134,25 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
       description: "Your podcast is being prepared for download."
     });
     
-    // Simulate download completion
+    // Simulate download completion or download the actual video
     setTimeout(() => {
+      const videoUrl = previewUrl || demoVideoUrl;
+      const a = document.createElement('a');
+      a.href = videoUrl;
+      a.download = `podcast-${projectId || 'demo'}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
       toast({
         title: "Download complete",
         description: "Your podcast has been downloaded successfully."
       });
-    }, 3000);
+    }, 1500);
   };
+  
+  // Determine video source
+  const videoSource = status === 'completed' ? (previewUrl || demoVideoUrl) : demoVideoUrl;
   
   return (
     <div className="space-y-6">
@@ -98,23 +165,27 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
         <TabsContent value="preview" className="pt-4">
           <GlassCard className="p-6 overflow-hidden">
             <div className="relative aspect-video rounded-lg overflow-hidden bg-gray-100">
-              {previewUrl ? (
-                <video 
-                  className="w-full h-full object-cover"
-                  src={previewUrl}
-                  controls={false}
-                  onClick={togglePlayback}
-                />
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <video 
+                ref={videoRef}
+                className="w-full h-full object-cover"
+                src={videoSource}
+                playsInline
+                muted={false}
+                onClick={togglePlayback}
+                onEnded={() => setIsPlaying(false)}
+              />
+              
+              {(!isPlaying || status === 'processing') && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/30 backdrop-blur-sm">
                   <button 
                     className="w-16 h-16 rounded-full bg-primary/80 backdrop-blur-sm flex items-center justify-center transition-transform hover:scale-110 animate-pulse-soft"
                     onClick={togglePlayback}
+                    disabled={status === 'processing'}
                   >
-                    {isPlaying ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
-                        <rect x="6" y="4" width="4" height="16"></rect>
-                        <rect x="14" y="4" width="4" height="16"></rect>
+                    {status === 'processing' ? (
+                      <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                     ) : (
                       <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
@@ -122,7 +193,7 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
                       </svg>
                     )}
                   </button>
-                  <p className="mt-4 text-muted-foreground text-sm">
+                  <p className="mt-4 text-white text-sm">
                     {status === 'draft' 
                       ? "Generate podcast to preview" 
                       : status === 'processing' 
@@ -139,7 +210,10 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
               <GlassPanel className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-1.5 bg-gray-200 rounded-full overflow-hidden cursor-pointer"
+                      onClick={handleSeek}
+                    >
                       <div 
                         className="h-full bg-gradient-to-r from-primary to-accent" 
                         style={{ width: `${(currentTime / duration) * 100}%` }}
@@ -152,7 +226,15 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
                   </div>
                   
                   <div className="ml-6 flex items-center space-x-4">
-                    <button className="p-2 hover:text-primary transition-colors">
+                    <button 
+                      className="p-2 hover:text-primary transition-colors"
+                      onClick={() => {
+                        if (videoRef.current) {
+                          videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
+                          setCurrentTime(videoRef.current.currentTime);
+                        }
+                      }}
+                    >
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polygon points="19 20 9 12 19 4 19 20"></polygon>
                         <line x1="5" y1="19" x2="5" y2="5"></line>
@@ -173,7 +255,15 @@ const PodcastPreview = ({ projectId, status = 'draft', onGenerateClick, previewU
                         </svg>
                       )}
                     </button>
-                    <button className="p-2 hover:text-primary transition-colors">
+                    <button 
+                      className="p-2 hover:text-primary transition-colors"
+                      onClick={() => {
+                        if (videoRef.current) {
+                          videoRef.current.currentTime = Math.min(duration, videoRef.current.currentTime + 10);
+                          setCurrentTime(videoRef.current.currentTime);
+                        }
+                      }}
+                    >
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polygon points="5 4 15 12 5 20 5 4"></polygon>
                         <line x1="19" y1="5" x2="19" y2="19"></line>

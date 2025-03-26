@@ -69,10 +69,69 @@ serve(async (req: Request) => {
     // In a real implementation, this would be where you'd call your AI/video generation service
     // For this demo, we'll simulate processing with a delay and then mark as complete
     
+    // Create a storage bucket for podcasts if it doesn't exist
+    try {
+      const { data: bucketData, error: bucketError } = await supabaseClient
+        .storage
+        .getBucket('podcasts');
+      
+      if (bucketError && bucketError.message.includes('not found')) {
+        await supabaseClient
+          .storage
+          .createBucket('podcasts', {
+            public: true,
+            fileSizeLimit: 512000000, // 512MB
+          });
+      }
+    } catch (error) {
+      console.error("Error ensuring bucket exists:", error);
+    }
+    
     // This would be done asynchronously in a real edge function using a queue or background task
     // For this demo, we'll use a simple setTimeout to simulate the async process
     setTimeout(async () => {
       try {
+        // Upload sample video (this would be a real generated video in production)
+        // In this demo, we're going to use a publicly available video
+        const sampleVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-business-woman-talking-4796-large.mp4";
+        
+        try {
+          // Fetch the sample video
+          const videoResponse = await fetch(sampleVideoUrl);
+          if (!videoResponse.ok) throw new Error("Failed to fetch sample video");
+          
+          const videoBlob = await videoResponse.blob();
+          
+          // Upload to Supabase storage
+          const { error: uploadError } = await supabaseClient
+            .storage
+            .from('podcasts')
+            .upload(`${projectId}/video.mp4`, videoBlob, {
+              contentType: 'video/mp4',
+              upsert: true
+            });
+            
+          if (uploadError) {
+            console.error("Error uploading video:", uploadError);
+            throw uploadError;
+          }
+          
+          // Make the uploaded file public
+          const { error: urlError } = await supabaseClient
+            .storage
+            .from('podcasts')
+            .update(`${projectId}/video.mp4`, videoBlob, {
+              contentType: 'video/mp4',
+              upsert: true
+            });
+          
+          if (urlError) {
+            console.error("Error making video public:", urlError);
+          }
+        } catch (error) {
+          console.error("Error handling video upload:", error);
+        }
+        
         // After "processing" is complete, update the project
         const { error: completeError } = await supabaseClient
           .from('projects')
@@ -89,6 +148,19 @@ serve(async (req: Request) => {
         }
       } catch (error) {
         console.error("Error in background task:", error);
+        
+        // If something goes wrong, set status back to draft
+        try {
+          await supabaseClient
+            .from('projects')
+            .update({ 
+              status: 'draft', 
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', projectId);
+        } catch (rollbackError) {
+          console.error("Error rolling back project status:", rollbackError);
+        }
       }
     }, 15000); // Simulate a 15 second processing time
     

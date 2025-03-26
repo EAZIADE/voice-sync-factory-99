@@ -121,7 +121,9 @@ const ProjectDetail = () => {
     setIsGenerating(true);
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-podcast`, {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+      
+      const response = await fetch(`${supabaseUrl}/functions/v1/generate-podcast`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -139,11 +141,13 @@ const ProjectDetail = () => {
         })
       });
       
-      const data = await response.json();
-      
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate podcast');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate podcast');
       }
+      
+      const data = await response.json();
+      console.log("Generation response:", data);
       
       toast({
         title: "Processing Started",
@@ -154,7 +158,7 @@ const ProjectDetail = () => {
         if (!prev) return null;
         return { 
           ...prev, 
-          status: 'processing' as 'draft' | 'processing' | 'completed',
+          status: 'processing' as const,
           updated_at: new Date().toISOString()
         };
       });
@@ -163,7 +167,7 @@ const ProjectDetail = () => {
       console.error("Error generating podcast:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to generate podcast. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to generate podcast. Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -229,7 +233,7 @@ const ProjectDetail = () => {
                 projectId={project.id}
                 status={project.status}
                 onGenerateClick={handleGeneratePodcast}
-                previewUrl={project.status === 'completed' ? `https://example.com/video/${project.id}` : undefined}
+                previewUrl={project.status === 'completed' ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/podcasts/${project.id}/video.mp4` : undefined}
               />
             </div>
             
