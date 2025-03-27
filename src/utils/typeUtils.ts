@@ -27,3 +27,25 @@ export function ensureValidStatus(status: string): 'draft' | 'processing' | 'com
 export function safeGet<T, K extends keyof T>(obj: T | null | undefined, key: K): T[K] | undefined {
   return obj ? obj[key] : undefined;
 }
+
+/**
+ * Convert Supabase data to a strongly typed application model
+ */
+export function convertToAppModel<T>(data: any): T {
+  if (!data) return null as unknown as T;
+  
+  // Handle potential error responses from Supabase
+  if (data.error === true) {
+    console.error("Error in Supabase data:", data);
+    return null as unknown as T;
+  }
+  
+  return data as T;
+}
+
+/**
+ * Check if a value is a valid non-empty string
+ */
+export function isValidString(value: any): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}

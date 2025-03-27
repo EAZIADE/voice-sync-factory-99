@@ -38,9 +38,54 @@ export const supabase = createClient<Database>(
  * Helper function to get a media file URL with proper cache busting and content type
  */
 export const getMediaUrl = (projectId: string, fileType: 'audio' | 'video'): string => {
+  if (!projectId) {
+    console.error("getMediaUrl called with empty projectId");
+    return '';
+  }
+  
   const timestamp = Date.now();
   const extension = fileType === 'audio' ? 'mp3' : 'mp4';
   const contentType = fileType === 'audio' ? 'audio/mpeg' : 'video/mp4';
   
+  // Create a public URL with cache busting
   return `${SUPABASE_URL}/storage/v1/object/public/podcasts/${projectId}/${fileType}.${extension}?t=${timestamp}&content-type=${encodeURIComponent(contentType)}`;
 };
+
+/**
+ * Check if a media file exists for a project
+ */
+export const checkMediaFileExists = async (projectId: string, fileType: 'audio' | 'video'): Promise<boolean> => {
+  if (!projectId) return false;
+  
+  const extension = fileType === 'audio' ? 'mp3' : 'mp4';
+  const path = `${projectId}/${fileType}.${extension}`;
+  
+  try {
+    const { data, error } = await supabase
+      .storage
+      .from('podcasts')
+      .list(projectId, {
+        limit: 10,
+        offset: 0,
+        sortBy: { column: 'name', order: 'asc' }
+      });
+    
+    if (error) {
+      console.error(`Error checking if ${fileType} file exists:`, error);
+      return false;
+    }
+    
+    // Look for the specific file in the list
+    return data.some(file => file.name === `${fileType}.${extension}`);
+  } catch (err) {
+    console.error(`Error checking ${fileType} file:`, err);
+    return false;
+  }
+};
+
+/**
+ * Helper function to convert Supabase types to application types
+ */
+export function asSupabaseType<T>(data: unknown): T {
+  return data as T;
+}

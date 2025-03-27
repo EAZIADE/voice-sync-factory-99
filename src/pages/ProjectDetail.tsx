@@ -7,10 +7,11 @@ import { GlassPanel } from "@/components/ui/GlassMorphism";
 import { AnimatedButton } from "@/components/ui/AnimatedButton";
 import Header from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
-import { supabase, getMediaUrl } from "@/integrations/supabase/client";
+import { supabase, getMediaUrl, checkMediaFileExists } from "@/integrations/supabase/client";
 import PodcastPreview from "@/components/PodcastPreview";
 import ProjectGenerator from "@/components/ProjectGenerator";
 import { toast } from "sonner";
+import { asType, convertToAppModel } from "@/utils/typeUtils";
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,8 +21,13 @@ const ProjectDetail = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<{video?: string, audio?: string}>({});
+  const [mediaFilesExist, setMediaFilesExist] = useState<{video: boolean, audio: boolean}>({
+    video: false,
+    audio: false
+  });
   const { toast: hookToast } = useToast();
 
+  // Fetch project data
   useEffect(() => {
     const loadProject = async () => {
       if (!user || !id) return;
@@ -38,12 +44,18 @@ const ProjectDetail = () => {
         if (error) throw error;
         
         if (data) {
+          const projectData = convertToAppModel<Project>(data);
           setProject({
-            ...(data as any),
-            status: (data as any).status === 'draft' || (data as any).status === 'processing' || (data as any).status === 'completed' 
-              ? (data as any).status 
+            ...projectData,
+            status: projectData.status === 'draft' || projectData.status === 'processing' || projectData.status === 'completed' 
+              ? projectData.status 
               : 'draft'
           });
+          
+          // If project is completed, check if media files exist and set URLs
+          if (projectData.status === 'completed') {
+            checkAndSetMediaUrls(id);
+          }
         }
       } catch (error) {
         console.error("Error loading project:", error);
@@ -62,6 +74,7 @@ const ProjectDetail = () => {
     }
   }, [user, id, hookToast]);
 
+  // Realtime subscription to project updates
   useEffect(() => {
     if (!id || !user) return;
 
@@ -74,7 +87,13 @@ const ProjectDetail = () => {
         filter: `id=eq.${id}` 
       }, (payload) => {
         console.log('Project update received:', payload);
-        setProject(prev => prev ? { ...prev, ...payload.new } : null);
+        const updatedProject = convertToAppModel<Project>(payload.new);
+        setProject(prev => prev ? { ...prev, ...updatedProject } : null);
+        
+        // If status changed to completed, check for media files
+        if (updatedProject.status === 'completed') {
+          checkAndSetMediaUrls(id);
+        }
       })
       .subscribe();
 
@@ -83,6 +102,7 @@ const ProjectDetail = () => {
     };
   }, [id, user]);
 
+  // Poll for project status updates when processing
   useEffect(() => {
     if (!id || !user || !project || project.status !== 'processing') return;
 
@@ -96,28 +116,24 @@ const ProjectDetail = () => {
           
         if (error) throw error;
         
-        if (data && (data as any).status !== project.status) {
-          const validStatus: 'draft' | 'processing' | 'completed' = 
-            (data as any).status === 'draft' || (data as any).status === 'processing' || (data as any).status === 'completed' 
-              ? (data as any).status 
+        const projectData = convertToAppModel<{status: string, updated_at: string}>(data);
+        
+        if (projectData && projectData.status !== project.status) {
+          const validStatus = projectData.status === 'draft' || projectData.status === 'processing' || projectData.status === 'completed' 
+              ? projectData.status as ('draft' | 'processing' | 'completed')
               : 'draft';
               
-          setProject(prev => prev ? { ...prev, status: validStatus, updated_at: (data as any).updated_at } : null);
+          setProject(prev => prev ? { ...prev, status: validStatus, updated_at: projectData.updated_at } : null);
           
-          if ((data as any).status === 'completed') {
+          if (projectData.status === 'completed') {
             hookToast({
               title: "Success!",
-              description: "Your AI podcast has been generated using Google's NotebookLM, Studio, and Gemini technology.",
+              description: "Your AI podcast has been generated using ElevenLabs technology.",
             });
             clearInterval(interval);
             
-            // When status changes to completed, update media URLs with cache busting
-            if (id) {
-              setMediaUrls({
-                video: getMediaUrl(id, 'video'),
-                audio: getMediaUrl(id, 'audio')
-              });
-            }
+            // When status changes to completed, check for media files and update URLs
+            await checkAndSetMediaUrls(id);
           }
         }
       } catch (error) {
@@ -127,6 +143,52 @@ const ProjectDetail = () => {
 
     return () => clearInterval(interval);
   }, [id, user, project, hookToast]);
+
+  // Helper function to check if media files exist and set URLs
+  const checkAndSetMediaUrls = async (projectId: string) => {
+    try {
+      console.log("Checking if media files exist for project:", projectId);
+      
+      // Check if video file exists
+      const videoExists = await checkMediaFileExists(projectId, 'video');
+      // Check if audio file exists
+      const audioExists = await checkMediaFileExists(projectId, 'audio');
+      
+      console.log("Media file check results:", { videoExists, audioExists });
+      
+      setMediaFilesExist({
+        video: videoExists,
+        audio: audioExists
+      });
+      
+      // Only set URLs for files that exist
+      const newMediaUrls: {video?: string, audio?: string} = {};
+      
+      if (videoExists) {
+        newMediaUrls.video = getMediaUrl(projectId, 'video');
+      }
+      
+      if (audioExists) {
+        newMediaUrls.audio = getMediaUrl(projectId, 'audio');
+      }
+      
+      console.log("Setting media URLs:", newMediaUrls);
+      setMediaUrls(newMediaUrls);
+      
+      // Show toast if media is ready
+      if (videoExists || audioExists) {
+        toast.success("Media files are ready", {
+          description: "Your podcast media is now available for playback"
+        });
+      } else if (project?.status === 'completed') {
+        toast.error("Media generation issue", {
+          description: "Your podcast status is complete, but media files weren't found"
+        });
+      }
+    } catch (err) {
+      console.error("Error checking media files:", err);
+    }
+  };
 
   const handleGenerateStart = () => {
     setIsGenerating(true);
@@ -160,30 +222,7 @@ const ProjectDetail = () => {
     });
   };
 
-  // Update media URLs when project status changes to completed
-  useEffect(() => {
-    if (!project || project.status !== 'completed' || !id) return;
-    
-    // Generate URLs with cache busting
-    const videoUrl = getMediaUrl(id, 'video');
-    const audioUrl = getMediaUrl(id, 'audio');
-    
-    console.log("Project completed, setting media URLs:");
-    console.log("Video URL:", videoUrl);
-    console.log("Audio URL:", audioUrl);
-    
-    setMediaUrls({
-      video: videoUrl,
-      audio: audioUrl
-    });
-    
-    // Log to help debugging
-    toast.success("Media URLs updated", {
-      description: "Podcast media files are ready for playback"
-    });
-    
-  }, [project?.status, id]);
-
+  // Loading state
   if (!loading && !user) {
     return <Navigate to="/auth" replace />;
   }
@@ -201,6 +240,7 @@ const ProjectDetail = () => {
     );
   }
 
+  // Project not found
   if (!project) {
     return (
       <div className="min-h-screen bg-background">
@@ -222,6 +262,7 @@ const ProjectDetail = () => {
     );
   }
 
+  // Main project detail view
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -258,6 +299,7 @@ const ProjectDetail = () => {
               </div>
             </div>
             
+            {/* Project details panel */}
             <div className="lg:col-span-1">
               <GlassPanel className="p-6">
                 <div className="flex justify-between items-start mb-4">
@@ -281,6 +323,14 @@ const ProjectDetail = () => {
                       </div>
                       <div>
                         <span className="text-muted-foreground">Last Updated:</span> {project?.updated_at ? new Date(project.updated_at).toLocaleString() : '-'}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Media Files:</span> {mediaFilesExist.video && mediaFilesExist.audio ? 
+                          <span className="text-green-500">Available</span> : 
+                          project.status === 'completed' ? 
+                            <span className="text-amber-500">Partially Available</span> : 
+                            <span className="text-muted-foreground">Not Available</span>
+                        }
                       </div>
                     </div>
                   </div>
@@ -318,6 +368,23 @@ const ProjectDetail = () => {
                           </div>
                         </div>
                       </div>
+                  )}
+                  
+                  {project.status === 'completed' && (!mediaFilesExist.video || !mediaFilesExist.audio) && (
+                    <div className="bg-yellow-500/10 p-4 rounded-md border border-yellow-500/20">
+                      <div className="flex items-start">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3 text-yellow-500 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        <div>
+                          <h4 className="text-sm font-medium text-yellow-700">Media Files Not Found</h4>
+                          <p className="text-xs text-yellow-600 mt-1">
+                            Some media files are missing. This could be due to an issue during generation. 
+                            Try regenerating your podcast.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   )}
                   
                   <div className="pt-2">
