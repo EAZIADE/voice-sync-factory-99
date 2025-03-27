@@ -48,6 +48,49 @@ export interface ExtendedDatabase {
           }
         ];
       };
+      eleven_labs_api_keys: {
+        Row: {
+          id: string;
+          user_id: string;
+          key: string;
+          name: string;
+          is_active: boolean;
+          quota_remaining: number | null;
+          last_used: string | null;
+          created_at: string;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          key: string;
+          name: string;
+          is_active?: boolean;
+          quota_remaining?: number | null;
+          last_used?: string | null;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          key?: string;
+          name?: string;
+          is_active?: boolean;
+          quota_remaining?: number | null;
+          last_used?: string | null;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "eleven_labs_api_keys_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     } & SupabaseDatabase['public']['Tables'];
     Views: SupabaseDatabase['public']['Views'];
     Functions: {

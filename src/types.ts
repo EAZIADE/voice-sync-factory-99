@@ -23,8 +23,8 @@ export interface Language {
   id: string;
   name: string;
   code: string;
-  flag: string;
-  popular: boolean;
+  flag: string; // Client-side only
+  popular: boolean; // Client-side only
   is_premium: boolean;
   created_at?: string;
 }

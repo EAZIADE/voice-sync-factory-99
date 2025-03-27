@@ -7,6 +7,7 @@ import {
   updateLocalElevenLabsKey, 
   deleteLocalElevenLabsKey 
 } from "@/utils/localStorageUtils";
+import { convertToAppModel, ensureValidStatus } from "@/utils/typeUtils";
 
 // Fetch hosts
 export const fetchHosts = async (): Promise<Host[]> => {
@@ -33,7 +34,12 @@ export const fetchTemplates = async (): Promise<Template[]> => {
       
     if (error) throw error;
     
-    return data || [];
+    const templatesWithDescription = data?.map(template => ({
+      ...template,
+      description: template.name // Use name as description if not available
+    })) || [];
+    
+    return templatesWithDescription;
   } catch (error) {
     console.error("Error fetching templates:", error);
     throw error;
@@ -49,7 +55,14 @@ export const fetchLanguages = async (): Promise<Language[]> => {
       
     if (error) throw error;
     
-    return data || [];
+    // Add client-side properties
+    const languagesWithClientProps = data?.map(language => ({
+      ...language,
+      flag: `https://cdn.jsdelivr.net/npm/country-flag-emoji-json@2.0.0/dist/images/${language.code.toUpperCase()}.svg`,
+      popular: false // Default value
+    })) || [];
+    
+    return languagesWithClientProps;
   } catch (error) {
     console.error("Error fetching languages:", error);
     throw error;
@@ -67,7 +80,13 @@ export const fetchProjects = async (userId: string): Promise<Project[]> => {
       
     if (error) throw error;
     
-    return data || [];
+    // Ensure status is one of the valid options
+    const projectsWithValidStatus = data?.map(project => ({
+      ...project,
+      status: ensureValidStatus(project.status)
+    })) || [];
+    
+    return projectsWithValidStatus;
   } catch (error) {
     console.error("Error fetching projects:", error);
     throw error;
@@ -85,7 +104,11 @@ export const fetchProject = async (projectId: string): Promise<Project> => {
       
     if (error) throw error;
     
-    return data;
+    // Ensure the status is valid
+    return {
+      ...data,
+      status: ensureValidStatus(data.status)
+    };
   } catch (error) {
     console.error("Error fetching project:", error);
     throw error;
@@ -93,7 +116,7 @@ export const fetchProject = async (projectId: string): Promise<Project> => {
 };
 
 // Create a new project
-export const createProject = async (project: Partial<Project>): Promise<Project> => {
+export const createProject = async (project: Omit<Project, 'id'>): Promise<Project> => {
   try {
     const { data, error } = await supabase
       .from('projects')
@@ -103,7 +126,10 @@ export const createProject = async (project: Partial<Project>): Promise<Project>
       
     if (error) throw error;
     
-    return data;
+    return {
+      ...data,
+      status: ensureValidStatus(data.status)
+    };
   } catch (error) {
     console.error("Error creating project:", error);
     throw error;
@@ -122,7 +148,10 @@ export const updateProject = async (projectId: string, updates: Partial<Project>
       
     if (error) throw error;
     
-    return data;
+    return {
+      ...data,
+      status: ensureValidStatus(data.status)
+    };
   } catch (error) {
     console.error("Error updating project:", error);
     throw error;
@@ -149,18 +178,10 @@ export const deleteProject = async (projectId: string): Promise<void> => {
 // Fetch ElevenLabs API keys for a user
 export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabsApiKey[]> => {
   try {
-    const { data, error } = await supabase
-      .from('eleven_labs_api_keys')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-      
-    if (error) {
-      console.warn("Supabase error, falling back to local storage:", error);
-      return getLocalElevenLabsKeys(userId);
-    }
-    
-    return data || [];
+    // Since eleven_labs_api_keys doesn't exist yet in the database schema, 
+    // we'll just return local storage keys
+    console.warn("Fetching from local storage only since eleven_labs_api_keys table doesn't exist yet");
+    return getLocalElevenLabsKeys(userId);
   } catch (error) {
     console.error("Error fetching ElevenLabs API keys:", error);
     // Fall back to local storage
@@ -198,32 +219,21 @@ export const validateElevenLabsApiKey = async (apiKey: string): Promise<boolean>
 };
 
 // Add a new ElevenLabs API key
-export const addElevenLabsApiKey = async (apiKey: Partial<ElevenLabsApiKey>): Promise<ElevenLabsApiKey> => {
+export const addElevenLabsApiKey = async (apiKey: Omit<ElevenLabsApiKey, 'id'>): Promise<ElevenLabsApiKey> => {
   try {
     console.log("Adding ElevenLabs API key:", apiKey.key?.substring(0, 8) + "...");
     
-    const { data, error } = await supabase
-      .from('eleven_labs_api_keys')
-      .insert(apiKey)
-      .select()
-      .single();
-      
-    if (error) {
-      console.warn("Supabase error, falling back to local storage:", error);
-      if (!apiKey.user_id || !apiKey.key || !apiKey.name) {
-        throw new Error("Invalid API key data");
-      }
-      return saveLocalElevenLabsKey(apiKey.user_id, {
-        key: apiKey.key,
-        name: apiKey.name,
-        is_active: apiKey.is_active || true,
-        user_id: apiKey.user_id,
-        quota_remaining: apiKey.quota_remaining,
-        last_used: apiKey.last_used
-      });
-    }
+    // Since eleven_labs_api_keys table doesn't exist yet, save to local storage
+    console.warn("Saving to local storage since eleven_labs_api_keys table doesn't exist yet");
+    return saveLocalElevenLabsKey(apiKey.user_id, {
+      key: apiKey.key,
+      name: apiKey.name,
+      is_active: apiKey.is_active || true,
+      user_id: apiKey.user_id,
+      quota_remaining: apiKey.quota_remaining,
+      last_used: apiKey.last_used
+    });
     
-    return data;
   } catch (error) {
     console.error("Error adding ElevenLabs API key:", error);
     throw error;
@@ -233,36 +243,12 @@ export const addElevenLabsApiKey = async (apiKey: Partial<ElevenLabsApiKey>): Pr
 // Update an ElevenLabs API key
 export const updateElevenLabsApiKey = async (keyId: string, updates: Partial<ElevenLabsApiKey>): Promise<ElevenLabsApiKey> => {
   try {
-    // Check if it's a local key
-    if (updates.is_local) {
-      if (!updates.user_id) {
-        throw new Error("User ID is required to update local key");
-      }
-      return updateLocalElevenLabsKey(updates.user_id, keyId, updates);
+    // Since the table doesn't exist yet, update in local storage
+    if (!updates.user_id) {
+      throw new Error("User ID is required to update local key");
     }
     
-    const { data, error } = await supabase
-      .from('eleven_labs_api_keys')
-      .update(updates)
-      .eq('id', keyId)
-      .select()
-      .single();
-      
-    if (error) {
-      console.warn("Supabase error, checking if local key:", error);
-      // Try to find it in local storage
-      if (updates.user_id) {
-        const localKeys = getLocalElevenLabsKeys(updates.user_id);
-        const isLocalKey = localKeys.some(k => k.id === keyId);
-        
-        if (isLocalKey) {
-          return updateLocalElevenLabsKey(updates.user_id, keyId, updates);
-        }
-      }
-      throw error;
-    }
-    
-    return data;
+    return updateLocalElevenLabsKey(updates.user_id, keyId, updates);
   } catch (error) {
     console.error("Error updating ElevenLabs API key:", error);
     throw error;
@@ -272,26 +258,12 @@ export const updateElevenLabsApiKey = async (keyId: string, updates: Partial<Ele
 // Delete an ElevenLabs API key
 export const deleteElevenLabsApiKey = async (keyId: string, userId?: string): Promise<void> => {
   try {
-    // If userId is provided, check local storage first
+    // If userId is provided, delete from local storage
     if (userId) {
-      const localKeys = getLocalElevenLabsKeys(userId);
-      const isLocalKey = localKeys.some(k => k.id === keyId);
-      
-      if (isLocalKey) {
-        deleteLocalElevenLabsKey(userId, keyId);
-        return;
-      }
-    }
-    
-    const { error } = await supabase
-      .from('eleven_labs_api_keys')
-      .delete()
-      .eq('id', keyId);
-      
-    if (error) {
-      // If userId is provided and the key wasn't found in local storage earlier,
-      // throw an error
-      throw error;
+      deleteLocalElevenLabsKey(userId, keyId);
+      return;
+    } else {
+      throw new Error("User ID is required to delete a key");
     }
   } catch (error) {
     console.error("Error deleting ElevenLabs API key:", error);
