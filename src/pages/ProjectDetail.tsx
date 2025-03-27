@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -7,7 +6,7 @@ import { GlassPanel } from "@/components/ui/GlassMorphism";
 import { AnimatedButton } from "@/components/ui/AnimatedButton";
 import Header from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
-import { supabase, getMediaUrl, checkMediaFileExists } from "@/integrations/supabase/client";
+import { supabase, getMediaUrl, checkMediaFileExists, ensurePodcastsBucketExists } from "@/integrations/supabase/client";
 import PodcastPreview from "@/components/PodcastPreview";
 import ProjectGenerator from "@/components/ProjectGenerator";
 import { toast } from "sonner";
@@ -27,7 +26,6 @@ const ProjectDetail = () => {
   });
   const { toast: hookToast } = useToast();
 
-  // Fetch project data
   useEffect(() => {
     const loadProject = async () => {
       if (!user || !id) return;
@@ -52,8 +50,8 @@ const ProjectDetail = () => {
               : 'draft'
           });
           
-          // If project is completed, check if media files exist and set URLs
           if (projectData.status === 'completed') {
+            await ensurePodcastsBucketExists();
             checkAndSetMediaUrls(id);
           }
         }
@@ -74,7 +72,6 @@ const ProjectDetail = () => {
     }
   }, [user, id, hookToast]);
 
-  // Realtime subscription to project updates
   useEffect(() => {
     if (!id || !user) return;
 
@@ -90,7 +87,6 @@ const ProjectDetail = () => {
         const updatedProject = convertToAppModel<Project>(payload.new);
         setProject(prev => prev ? { ...prev, ...updatedProject } : null);
         
-        // If status changed to completed, check for media files
         if (updatedProject.status === 'completed') {
           checkAndSetMediaUrls(id);
         }
@@ -102,7 +98,6 @@ const ProjectDetail = () => {
     };
   }, [id, user]);
 
-  // Poll for project status updates when processing
   useEffect(() => {
     if (!id || !user || !project || project.status !== 'processing') return;
 
@@ -132,26 +127,31 @@ const ProjectDetail = () => {
             });
             clearInterval(interval);
             
-            // When status changes to completed, check for media files and update URLs
             await checkAndSetMediaUrls(id);
           }
         }
       } catch (error) {
         console.error("Error polling project status:", error);
       }
-    }, 5000); // Poll every 5 seconds
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [id, user, project, hookToast]);
 
-  // Helper function to check if media files exist and set URLs
   const checkAndSetMediaUrls = async (projectId: string) => {
     try {
       console.log("Checking if media files exist for project:", projectId);
       
-      // Check if video file exists
+      const bucketExists = await ensurePodcastsBucketExists();
+      if (!bucketExists) {
+        console.error("Podcasts bucket does not exist or is not accessible");
+        toast.error("Storage configuration issue", {
+          description: "Media storage is not properly configured"
+        });
+        return;
+      }
+      
       const videoExists = await checkMediaFileExists(projectId, 'video');
-      // Check if audio file exists
       const audioExists = await checkMediaFileExists(projectId, 'audio');
       
       console.log("Media file check results:", { videoExists, audioExists });
@@ -161,32 +161,35 @@ const ProjectDetail = () => {
         audio: audioExists
       });
       
-      // Only set URLs for files that exist
       const newMediaUrls: {video?: string, audio?: string} = {};
       
       if (videoExists) {
         newMediaUrls.video = getMediaUrl(projectId, 'video');
+        console.log("Video URL set to:", newMediaUrls.video);
       }
       
       if (audioExists) {
         newMediaUrls.audio = getMediaUrl(projectId, 'audio');
+        console.log("Audio URL set to:", newMediaUrls.audio);
       }
       
       console.log("Setting media URLs:", newMediaUrls);
       setMediaUrls(newMediaUrls);
       
-      // Show toast if media is ready
       if (videoExists || audioExists) {
         toast.success("Media files are ready", {
           description: "Your podcast media is now available for playback"
         });
       } else if (project?.status === 'completed') {
         toast.error("Media generation issue", {
-          description: "Your podcast status is complete, but media files weren't found"
+          description: "Your podcast status is complete, but media files weren't found. You may need to regenerate."
         });
       }
     } catch (err) {
       console.error("Error checking media files:", err);
+      toast.error("Media access error", {
+        description: "There was a problem accessing your podcast media"
+      });
     }
   };
 
@@ -222,7 +225,6 @@ const ProjectDetail = () => {
     });
   };
 
-  // Loading state
   if (!loading && !user) {
     return <Navigate to="/auth" replace />;
   }
@@ -240,7 +242,6 @@ const ProjectDetail = () => {
     );
   }
 
-  // Project not found
   if (!project) {
     return (
       <div className="min-h-screen bg-background">
@@ -262,7 +263,6 @@ const ProjectDetail = () => {
     );
   }
 
-  // Main project detail view
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -299,7 +299,6 @@ const ProjectDetail = () => {
               </div>
             </div>
             
-            {/* Project details panel */}
             <div className="lg:col-span-1">
               <GlassPanel className="p-6">
                 <div className="flex justify-between items-start mb-4">

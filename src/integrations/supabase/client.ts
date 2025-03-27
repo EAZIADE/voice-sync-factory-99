@@ -13,17 +13,17 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
 
 // Media file utilities
 export const getMediaUrl = (projectId: string, type: 'video' | 'audio'): string => {
-  const extension = type === 'video' ? 'mp4' : 'mp3';
-  return `${SUPABASE_URL}/storage/v1/object/public/podcasts/${projectId}.${extension}`;
+  const fileName = type === 'video' ? 'video.mp4' : 'audio.mp3';
+  return `${SUPABASE_URL}/storage/v1/object/public/podcasts/${projectId}/${fileName}`;
 };
 
 export const checkMediaFileExists = async (projectId: string, type: 'video' | 'audio'): Promise<boolean> => {
   try {
-    const extension = type === 'video' ? 'mp4' : 'mp3';
+    const fileName = type === 'video' ? 'video.mp4' : 'audio.mp3';
     const { data } = await supabase
       .storage
       .from('podcasts')
-      .getPublicUrl(`${projectId}.${extension}`);
+      .getPublicUrl(`${projectId}/${fileName}`);
     
     if (!data || !data.publicUrl) {
       console.error(`No public URL found for ${type} file`);
@@ -31,10 +31,48 @@ export const checkMediaFileExists = async (projectId: string, type: 'video' | 'a
     }
     
     // Make a HEAD request to check if the file exists
-    const response = await fetch(data.publicUrl, { method: 'HEAD' });
+    const response = await fetch(data.publicUrl, { 
+      method: 'HEAD',
+      cache: 'no-store' // Prevent caching to ensure we get the latest status
+    });
+    
+    console.log(`${type} file check result:`, {
+      status: response.status,
+      ok: response.ok,
+      contentType: response.headers.get('content-type'),
+      contentLength: response.headers.get('content-length')
+    });
+    
     return response.ok;
   } catch (error) {
     console.error(`Error checking if ${type} file exists:`, error);
+    return false;
+  }
+};
+
+// Helper function to ensure the podcasts bucket exists
+export const ensurePodcastsBucketExists = async (): Promise<boolean> => {
+  try {
+    // Check if the bucket exists
+    const { data: buckets, error: bucketsError } = await supabase
+      .storage
+      .listBuckets();
+      
+    if (bucketsError) {
+      console.error("Error checking buckets:", bucketsError);
+      return false;
+    }
+    
+    const podcastsBucketExists = buckets.some(bucket => bucket.name === 'podcasts');
+    
+    if (!podcastsBucketExists) {
+      console.error("Podcasts bucket does not exist!");
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error("Error ensuring podcasts bucket exists:", error);
     return false;
   }
 };

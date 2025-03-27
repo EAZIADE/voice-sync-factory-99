@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { GlassCard, GlassPanel } from "./ui/GlassMorphism";
 import { AnimatedButton } from "./ui/AnimatedButton";
@@ -45,26 +44,31 @@ const PodcastPreview = ({
   const demoVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-business-woman-talking-4796-large.mp4";
   const demoAudioUrl = "https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3";
   
-  const videoSource = status === 'completed' && previewUrl && typeof previewUrl === 'string' && previewUrl.startsWith('http')
-    ? previewUrl 
-    : demoVideoUrl;
-    
-  const audioSource = status === 'completed' && audioUrl && typeof audioUrl === 'string' && audioUrl.startsWith('http')
-    ? audioUrl
-    : demoAudioUrl;
+  const sanitizeMediaUrl = useCallback((url?: string): string => {
+    if (!url || typeof url !== 'string' || !url.startsWith('http')) {
+      return '';
+    }
+    return url;
+  }, []);
   
-  // Reset error states when URLs change
+  const videoSource = status === 'completed' && previewUrl ? sanitizeMediaUrl(previewUrl) || demoVideoUrl : demoVideoUrl;
+  const audioSource = status === 'completed' && audioUrl ? sanitizeMediaUrl(audioUrl) || demoAudioUrl : demoAudioUrl;
+  
   useEffect(() => {
     setVideoError(null);
     setAudioError(null);
     setLoadAttempts(0);
     
     if (status === 'completed') {
-      console.log('Media sources updated:', { video: previewUrl, audio: audioUrl });
+      console.log('Media sources updated:', { 
+        video: previewUrl, 
+        sanitizedVideo: sanitizeMediaUrl(previewUrl),
+        audio: audioUrl,
+        sanitizedAudio: sanitizeMediaUrl(audioUrl)
+      });
     }
-  }, [previewUrl, audioUrl, status]);
+  }, [previewUrl, audioUrl, status, sanitizeMediaUrl]);
 
-  // Function to validate media URL
   const validateMediaUrl = useCallback(async (url: string, mediaType: 'video' | 'audio'): Promise<boolean> => {
     if (!url || !url.startsWith('http')) {
       console.error(`Invalid ${mediaType} URL format:`, url);
@@ -77,31 +81,56 @@ const PodcastPreview = ({
     }
     
     try {
-      console.log(`Using ${mediaType} URL:`, url);
+      console.log(`Validating ${mediaType} URL:`, url);
+      
+      const response = await fetch(url, { 
+        method: 'HEAD',
+        cache: 'no-store'
+      });
+      
+      console.log(`${mediaType} validation result:`, {
+        status: response.status,
+        ok: response.ok,
+        contentType: response.headers.get('content-type'),
+        contentLength: response.headers.get('content-length')
+      });
+      
+      if (!response.ok) {
+        if (mediaType === 'video') {
+          setVideoError(`Video file not accessible (${response.status})`);
+        } else {
+          setAudioError(`Audio file not accessible (${response.status})`);
+        }
+        return false;
+      }
+      
       return true;
     } catch (err) {
       console.error(`Error checking ${mediaType} URL:`, err);
       if (mediaType === 'video') {
-        setVideoError(`Error accessing video source`);
+        setVideoError(`Error accessing video source: ${err.message}`);
       } else {
-        setAudioError(`Error accessing audio source`);
+        setAudioError(`Error accessing audio source: ${err.message}`);
       }
       return false;
     }
   }, []);
 
-  // Load media when sources change
   useEffect(() => {
     if (status !== 'completed' || loadAttempts > 5) return;
 
     const loadMedia = async () => {
-      console.log("Attempting to load media:", loadAttempts);
+      console.log("Attempting to load media (attempt", loadAttempts + 1, ")");
+      console.log("Video source:", videoSource);
+      console.log("Audio source:", audioSource);
       
       if (videoSource !== demoVideoUrl) {
         const videoValid = await validateMediaUrl(videoSource, 'video');
         if (!videoValid) {
           setMediaType('audio');
+          console.log("Video validation failed, switching to audio mode");
         } else if (videoRef.current) {
+          console.log("Setting video source to:", videoSource);
           videoRef.current.src = videoSource;
           videoRef.current.load();
         }
@@ -110,9 +139,11 @@ const PodcastPreview = ({
       if (audioSource !== demoAudioUrl) {
         const audioValid = await validateMediaUrl(audioSource, 'audio');
         if (!audioValid && audioRef.current) {
+          console.log("Audio validation failed, using demo audio");
           audioRef.current.src = demoAudioUrl;
           audioRef.current.load();
         } else if (audioRef.current) {
+          console.log("Setting audio source to:", audioSource);
           audioRef.current.src = audioSource;
           audioRef.current.load();
         }
@@ -126,7 +157,6 @@ const PodcastPreview = ({
     return () => clearTimeout(timeoutId);
   }, [status, videoSource, audioSource, loadAttempts, validateMediaUrl, demoVideoUrl, demoAudioUrl]);
 
-  // Handle playback
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
@@ -219,7 +249,6 @@ const PodcastPreview = ({
     };
   }, [isPlaying, mediaType, videoSource, audioSource, demoVideoUrl, demoAudioUrl, duration]);
 
-  // Handle media events
   useEffect(() => {
     const handleLoadedMetadata = (e: Event) => {
       const target = e.target as HTMLMediaElement;
@@ -359,18 +388,21 @@ const PodcastPreview = ({
     }
     
     const downloadUrl = mediaType === 'video' 
-      ? (videoError ? demoVideoUrl : videoSource)
-      : (audioError ? demoAudioUrl : audioSource);
+      ? (videoError || !sanitizeMediaUrl(videoSource) ? demoVideoUrl : videoSource)
+      : (audioError || !sanitizeMediaUrl(audioSource) ? demoAudioUrl : audioSource);
     const fileType = mediaType === 'video' ? 'video.mp4' : 'audio.mp3';
+    const fileName = `podcast-${projectId || 'demo'}-${fileType}`;
+    
+    console.log("Starting download with URL:", downloadUrl);
+    console.log("File name:", fileName);
     
     toast.success("Download started", {
       description: `Your podcast ${mediaType} is being prepared for download.`
     });
     
-    // Create a temporary anchor element to trigger the download
     const a = document.createElement('a');
     a.href = downloadUrl;
-    a.download = `podcast-${projectId || 'demo'}-${fileType}`;
+    a.download = fileName;
     a.target = '_blank';
     document.body.appendChild(a);
     a.click();
@@ -439,8 +471,7 @@ const PodcastPreview = ({
                     ) : (videoError && audioError) || generationError ? (
                       <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
                         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                        <line x1="12" y1="9" x2="12" y2="13"></line>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        <line x1="5" y1="19" x2="5" y2="5"></line>
                       </svg>
                     ) : (
                       <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
