@@ -1,3 +1,4 @@
+
 // Function to generate AI podcasts with character animation using ElevenLabs API
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.23.0";
@@ -191,7 +192,7 @@ serve(async (req: Request) => {
       console.error("Error ensuring bucket exists:", error);
     }
     
-    // This part would be done asynchronously in a real edge function using a queue or background task
+    // Start the podcast generation in the background
     setTimeout(async () => {
       try {
         // Get script content from project or use default

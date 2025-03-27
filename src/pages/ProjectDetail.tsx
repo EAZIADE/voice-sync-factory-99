@@ -9,6 +9,7 @@ import Header from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import PodcastPreview from "@/components/PodcastPreview";
+import ProjectGenerator from "@/components/ProjectGenerator";
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -118,89 +119,36 @@ const ProjectDetail = () => {
     return () => clearInterval(interval);
   }, [id, user, project, toast]);
 
-  const handleGeneratePodcast = async () => {
-    if (!project || !id || !user || !session) return;
-    
+  const handleGenerateStart = () => {
     setIsGenerating(true);
     setGenerationError(null);
     
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cvfqcvytoobplgracobg.supabase.co';
-      
-      console.log("Generating podcast with URL:", `${supabaseUrl}/functions/v1/generate-podcast`);
-      console.log("Project ID:", id);
-      console.log("Session token available:", !!session.access_token);
-      
-      const response = await fetch(`${supabaseUrl}/functions/v1/generate-podcast`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({ 
-          projectId: id,
-          characterControls: {
-            expressiveness: 70,
-            gestureIntensity: 50,
-            speakingPace: 60,
-            autoGestures: true,
-            eyeContact: true
-          }
-        })
-      });
-      
-      console.log("Response status:", response.status);
-      
-      if (!response.ok) {
-        let errorMessage = 'Failed to generate podcast';
-        
-        try {
-          const errorText = await response.text();
-          console.log("Error response text:", errorText);
-          
-          try {
-            const errorJson = JSON.parse(errorText);
-            errorMessage = errorJson.error || errorMessage;
-            console.log("Parsed error message:", errorMessage);
-          } catch (jsonError) {
-            errorMessage = errorText || errorMessage;
-            console.log("Using text as error message:", errorMessage);
-          }
-        } catch (textError) {
-          console.log("Could not read error response text:", textError);
-        }
-        
-        setGenerationError(errorMessage);
-        throw new Error(errorMessage);
-      }
-      
-      const data = await response.json();
-      console.log("Generation response:", data);
-      
-      toast({
-        title: "AI Processing Started",
-        description: "Your podcast is being generated with ElevenLabs. This may take a few minutes.",
-      });
-      
-      setProject(prev => {
-        if (!prev) return null;
-        return { 
-          ...prev, 
-          status: 'processing' as const,
-          updated_at: new Date().toISOString()
-        };
-      });
-      
-    } catch (error) {
-      console.error("Error generating podcast:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to generate podcast. Please try again.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsGenerating(false);
-    }
+    setProject(prev => {
+      if (!prev) return null;
+      return { 
+        ...prev, 
+        status: 'processing' as const,
+        updated_at: new Date().toISOString()
+      };
+    });
+  };
+
+  const handleGenerateSuccess = () => {
+    setIsGenerating(false);
+  };
+
+  const handleGenerateError = (errorMessage: string) => {
+    setIsGenerating(false);
+    setGenerationError(errorMessage);
+    
+    setProject(prev => {
+      if (!prev) return null;
+      return { 
+        ...prev, 
+        status: 'draft' as const,
+        updated_at: new Date().toISOString()
+      };
+    });
   };
 
   // Update this useEffect hook to verify media URLs when status changes to completed
@@ -219,7 +167,10 @@ const ProjectDetail = () => {
     // Verify the URLs are valid with HEAD requests
     const checkUrl = async (url: string, mediaType: 'video' | 'audio') => {
       try {
-        const response = await fetch(url, { method: 'HEAD' });
+        const response = await fetch(url, { 
+          method: 'HEAD',
+          cache: 'no-cache' // Prevent caching
+        });
         
         if (!response.ok) {
           console.error(`${mediaType} URL check failed:`, response.status);
@@ -298,11 +249,11 @@ const ProjectDetail = () => {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cvfqcvytoobplgracobg.supabase.co';
   
   const videoUrl = mediaUrls.video || (project?.status === 'completed' && project?.id 
-    ? `${supabaseUrl}/storage/v1/object/public/podcasts/${project.id}/video.mp4` 
+    ? `${supabaseUrl}/storage/v1/object/public/podcasts/${project.id}/video.mp4?${Date.now()}` 
     : undefined);
   
   const audioUrl = mediaUrls.audio || (project?.status === 'completed' && project?.id
-    ? `${supabaseUrl}/storage/v1/object/public/podcasts/${project.id}/audio.mp3` 
+    ? `${supabaseUrl}/storage/v1/object/public/podcasts/${project.id}/audio.mp3?${Date.now()}` 
     : undefined);
 
   return (
@@ -321,14 +272,24 @@ const ProjectDetail = () => {
           
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
-              <PodcastPreview 
-                projectId={project?.id}
-                status={project?.status}
-                onGenerateClick={handleGeneratePodcast}
-                previewUrl={videoUrl}
-                audioUrl={audioUrl}
-                generationError={generationError}
-              />
+              <div className="space-y-6">
+                <PodcastPreview 
+                  projectId={project?.id}
+                  status={project?.status}
+                  previewUrl={videoUrl}
+                  audioUrl={audioUrl}
+                  generationError={generationError}
+                />
+                
+                {project.status !== 'processing' && (
+                  <ProjectGenerator 
+                    project={project}
+                    onGenerateStart={handleGenerateStart}
+                    onGenerateSuccess={handleGenerateSuccess}
+                    onGenerateError={handleGenerateError}
+                  />
+                )}
+              </div>
             </div>
             
             <div className="lg:col-span-1">
