@@ -20,13 +20,13 @@ export const getMediaUrl = (projectId: string, type: 'video' | 'audio'): string 
 export const checkMediaFileExists = async (projectId: string, type: 'video' | 'audio'): Promise<boolean> => {
   try {
     const extension = type === 'video' ? 'mp4' : 'mp3';
-    const { data, error } = await supabase
+    const { data } = await supabase
       .storage
       .from('podcasts')
       .getPublicUrl(`${projectId}.${extension}`);
     
-    if (error) {
-      console.error(`Error checking if ${type} file exists:`, error);
+    if (!data || !data.publicUrl) {
+      console.error(`No public URL found for ${type} file`);
       return false;
     }
     
