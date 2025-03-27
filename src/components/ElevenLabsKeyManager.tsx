@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { 
@@ -12,10 +13,9 @@ import { useToast } from "@/hooks/use-toast";
 import { GlassPanel } from "@/components/ui/GlassMorphism";
 import { AnimatedButton } from "@/components/ui/AnimatedButton";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useForm } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, CheckCircle, AlertCircle, Edit, Save, X } from "lucide-react";
+import { Trash2, CheckCircle, AlertCircle, Edit, Save, X, Database, HardDrive } from "lucide-react";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import * as z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -66,7 +66,7 @@ const ElevenLabsKeyManager = () => {
       console.error("Error loading API keys:", error);
       toast({
         title: "Error",
-        description: "Failed to load your API keys. Please try again.",
+        description: "Failed to load your API keys. Using locally stored keys if available.",
         variant: "destructive"
       });
     } finally {
@@ -121,7 +121,9 @@ const ElevenLabsKeyManager = () => {
     
     try {
       await updateElevenLabsApiKey(key.id!, {
-        is_active: !key.is_active
+        is_active: !key.is_active,
+        user_id: user.id, // Add user_id for local storage handling
+        is_local: key.is_local // Preserve local flag
       });
       
       toast({
@@ -140,11 +142,11 @@ const ElevenLabsKeyManager = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!user) return;
+  const handleDelete = async (key: ElevenLabsApiKey) => {
+    if (!user || !key.id) return;
     
     try {
-      await deleteElevenLabsApiKey(id);
+      await deleteElevenLabsApiKey(key.id, user.id); // Pass user.id for local storage handling
       
       toast({
         title: "Success",
@@ -192,7 +194,9 @@ const ElevenLabsKeyManager = () => {
       
       await updateElevenLabsApiKey(editingKeyId, {
         key: values.key,
-        name: values.name
+        name: values.name,
+        user_id: user.id, // Add user_id for local storage handling
+        is_local: currentKey?.is_local // Preserve local flag
       });
       
       toast({
@@ -359,6 +363,12 @@ const ElevenLabsKeyManager = () => {
                           <Badge variant={key.is_active ? "success" : "secondary"}>
                             {key.is_active ? "Active" : "Inactive"}
                           </Badge>
+                          {key.is_local && (
+                            <Badge variant="outline" className="flex items-center gap-1">
+                              <HardDrive className="h-3 w-3" />
+                              Local
+                            </Badge>
+                          )}
                         </div>
                         <div className="mt-1 font-mono text-xs text-muted-foreground">
                           {key.key.substring(0, 8)}...{key.key.substring(key.key.length - 4)}
@@ -387,7 +397,7 @@ const ElevenLabsKeyManager = () => {
                         </AnimatedButton>
                         
                         <AnimatedButton 
-                          onClick={() => handleDelete(key.id!)} 
+                          onClick={() => handleDelete(key)} 
                           variant="default" 
                           size="sm"
                         >
@@ -417,6 +427,21 @@ const ElevenLabsKeyManager = () => {
             ))}
           </div>
         )}
+
+        <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+          <div className="flex items-start gap-2">
+            <div className="text-blue-500 mt-0.5">
+              <Database className="h-5 w-5" />
+            </div>
+            <div>
+              <h4 className="font-medium text-blue-600">Using local storage</h4>
+              <p className="text-sm text-muted-foreground mt-1">
+                Your API keys are being stored in your browser's local storage since Supabase connection is not available. 
+                Keys will only be available on this device and browser.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </GlassPanel>
   );

@@ -51,6 +51,7 @@ export interface ElevenLabsApiKey {
   key: string;
   name: string;
   is_active: boolean;
+  is_local?: boolean; // Flag to indicate if the key is stored locally
   quota_remaining?: number;
   last_used?: string;
   created_at?: string;

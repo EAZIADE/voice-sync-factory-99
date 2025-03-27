@@ -1,6 +1,12 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { ElevenLabsApiKey, Host, Language, Project, Template } from "@/types";
+import { 
+  getLocalElevenLabsKeys, 
+  saveLocalElevenLabsKey, 
+  updateLocalElevenLabsKey, 
+  deleteLocalElevenLabsKey 
+} from "@/utils/localStorageUtils";
 
 // Fetch hosts
 export const fetchHosts = async (): Promise<Host[]> => {
@@ -149,12 +155,16 @@ export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabs
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
       
-    if (error) throw error;
+    if (error) {
+      console.warn("Supabase error, falling back to local storage:", error);
+      return getLocalElevenLabsKeys(userId);
+    }
     
     return data || [];
   } catch (error) {
     console.error("Error fetching ElevenLabs API keys:", error);
-    throw error;
+    // Fall back to local storage
+    return getLocalElevenLabsKeys(userId);
   }
 };
 
@@ -199,8 +209,18 @@ export const addElevenLabsApiKey = async (apiKey: Partial<ElevenLabsApiKey>): Pr
       .single();
       
     if (error) {
-      console.error("Error adding ElevenLabs API key:", error);
-      throw error;
+      console.warn("Supabase error, falling back to local storage:", error);
+      if (!apiKey.user_id || !apiKey.key || !apiKey.name) {
+        throw new Error("Invalid API key data");
+      }
+      return saveLocalElevenLabsKey(apiKey.user_id, {
+        key: apiKey.key,
+        name: apiKey.name,
+        is_active: apiKey.is_active || true,
+        user_id: apiKey.user_id,
+        quota_remaining: apiKey.quota_remaining,
+        last_used: apiKey.last_used
+      });
     }
     
     return data;
@@ -213,6 +233,14 @@ export const addElevenLabsApiKey = async (apiKey: Partial<ElevenLabsApiKey>): Pr
 // Update an ElevenLabs API key
 export const updateElevenLabsApiKey = async (keyId: string, updates: Partial<ElevenLabsApiKey>): Promise<ElevenLabsApiKey> => {
   try {
+    // Check if it's a local key
+    if (updates.is_local) {
+      if (!updates.user_id) {
+        throw new Error("User ID is required to update local key");
+      }
+      return updateLocalElevenLabsKey(updates.user_id, keyId, updates);
+    }
+    
     const { data, error } = await supabase
       .from('eleven_labs_api_keys')
       .update(updates)
@@ -220,7 +248,19 @@ export const updateElevenLabsApiKey = async (keyId: string, updates: Partial<Ele
       .select()
       .single();
       
-    if (error) throw error;
+    if (error) {
+      console.warn("Supabase error, checking if local key:", error);
+      // Try to find it in local storage
+      if (updates.user_id) {
+        const localKeys = getLocalElevenLabsKeys(updates.user_id);
+        const isLocalKey = localKeys.some(k => k.id === keyId);
+        
+        if (isLocalKey) {
+          return updateLocalElevenLabsKey(updates.user_id, keyId, updates);
+        }
+      }
+      throw error;
+    }
     
     return data;
   } catch (error) {
@@ -230,14 +270,29 @@ export const updateElevenLabsApiKey = async (keyId: string, updates: Partial<Ele
 };
 
 // Delete an ElevenLabs API key
-export const deleteElevenLabsApiKey = async (keyId: string): Promise<void> => {
+export const deleteElevenLabsApiKey = async (keyId: string, userId?: string): Promise<void> => {
   try {
+    // If userId is provided, check local storage first
+    if (userId) {
+      const localKeys = getLocalElevenLabsKeys(userId);
+      const isLocalKey = localKeys.some(k => k.id === keyId);
+      
+      if (isLocalKey) {
+        deleteLocalElevenLabsKey(userId, keyId);
+        return;
+      }
+    }
+    
     const { error } = await supabase
       .from('eleven_labs_api_keys')
       .delete()
       .eq('id', keyId);
       
-    if (error) throw error;
+    if (error) {
+      // If userId is provided and the key wasn't found in local storage earlier,
+      // throw an error
+      throw error;
+    }
   } catch (error) {
     console.error("Error deleting ElevenLabs API key:", error);
     throw error;
