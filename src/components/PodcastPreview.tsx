@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from "react";
 import { GlassCard, GlassPanel } from "./ui/GlassMorphism";
 import { AnimatedButton } from "./ui/AnimatedButton";
@@ -40,11 +39,9 @@ const PodcastPreview = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   
-  // Demo media URLs (replace with actual media when available)
   const demoVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-business-woman-talking-4796-large.mp4";
   const demoAudioUrl = "https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3";
   
-  // Determine media source - ensure it's a valid URL with proper validation
   const videoSource = status === 'completed' && previewUrl && typeof previewUrl === 'string' && previewUrl.startsWith('http')
     ? previewUrl 
     : demoVideoUrl;
@@ -53,12 +50,27 @@ const PodcastPreview = ({
     ? audioUrl
     : demoAudioUrl;
   
-  // Validate media URLs before using them
   const validateMediaUrl = async (url: string, mediaType: 'video' | 'audio'): Promise<boolean> => {
     try {
-      const response = await fetch(url, { 
+      console.log(`Validating ${mediaType} URL: ${url}`);
+      
+      if (!url || !url.startsWith('http')) {
+        console.error(`Invalid ${mediaType} URL format:`, url);
+        if (mediaType === 'video') {
+          setVideoError(`Invalid video URL format. Using demo content instead.`);
+        } else {
+          setAudioError(`Invalid audio URL format. Using demo content instead.`);
+        }
+        return false;
+      }
+      
+      const urlWithCacheBuster = new URL(url);
+      urlWithCacheBuster.searchParams.append('t', Date.now().toString());
+      
+      const response = await fetch(urlWithCacheBuster.toString(), { 
         method: 'HEAD',
         mode: 'cors',
+        cache: 'no-cache',
         credentials: 'omit'
       });
       
@@ -72,22 +84,26 @@ const PodcastPreview = ({
         return false;
       }
       
-      // Check content type for appropriate media type
       const contentType = response.headers.get('content-type');
       console.log(`${mediaType} content type:`, contentType);
       
-      if (mediaType === 'video' && contentType && !contentType.includes('video/')) {
+      if (mediaType === 'video' && contentType && 
+          !contentType.includes('video/') && 
+          !contentType.includes('application/octet-stream')) {
         console.error('Invalid video content type:', contentType);
-        setVideoError('Invalid video format. Using demo content instead.');
+        setVideoError(`Invalid video format (${contentType}). Using demo content instead.`);
         return false;
       }
       
-      if (mediaType === 'audio' && contentType && !contentType.includes('audio/')) {
+      if (mediaType === 'audio' && contentType && 
+          !contentType.includes('audio/') && 
+          !contentType.includes('application/octet-stream')) {
         console.error('Invalid audio content type:', contentType);
-        setAudioError('Invalid audio format. Using demo content instead.');
+        setAudioError(`Invalid audio format (${contentType}). Using demo content instead.`);
         return false;
       }
       
+      console.log(`${mediaType} URL validation successful`);
       return true;
     } catch (err) {
       console.error(`Error checking ${mediaType} URL:`, err);
@@ -101,13 +117,11 @@ const PodcastPreview = ({
   };
   
   useEffect(() => {
-    // Reset errors when source changes
     setVideoError(null);
     setAudioError(null);
     
     console.log("Media source updates - Video:", videoSource, "Audio:", audioSource);
     
-    // When status changes to completed, check if the media is actually available
     if (status === 'completed') {
       if (previewUrl) {
         if (!previewUrl.startsWith('http')) {
@@ -117,17 +131,14 @@ const PodcastPreview = ({
           validateMediaUrl(previewUrl, 'video')
             .then(valid => {
               if (!valid && audioUrl && audioUrl.startsWith('http')) {
-                // Try using audio instead
                 setMediaType('audio');
               }
             });
         }
       } else if (audioUrl) {
-        // If no video but we have audio, default to audio
         setMediaType('audio');
       }
       
-      // Also validate audio URL if we have one
       if (audioUrl && audioUrl.startsWith('http')) {
         validateMediaUrl(audioUrl, 'audio');
       }
@@ -139,35 +150,39 @@ const PodcastPreview = ({
     
     if (isPlaying) {
       if (mediaType === 'video' && videoRef.current) {
+        console.log("Attempting to play video:", videoRef.current.src);
         videoRef.current.play().catch(err => {
           console.error("Error playing video:", err);
           setVideoError(`Error playing video: ${err.message}. Using demo content instead.`);
           
-          // Fallback to demo content
           if (videoSource !== demoVideoUrl) {
             if (videoRef.current) {
+              console.log("Trying demo video instead:", demoVideoUrl);
               videoRef.current.src = demoVideoUrl;
+              videoRef.current.load();
               videoRef.current.play().catch(demoErr => {
                 console.error("Error playing demo video:", demoErr);
                 
-                // If demo video also fails, try audio
-                setMediaType('audio');
+                if (videoSource !== demoVideoUrl) {
+                  setMediaType('audio');
+                }
               });
             }
           } else {
-            // If already using demo content that's failing, try audio
             setMediaType('audio');
           }
         });
       } else if (mediaType === 'audio' && audioRef.current) {
+        console.log("Attempting to play audio:", audioRef.current.src);
         audioRef.current.play().catch(err => {
           console.error("Error playing audio:", err);
           setAudioError(`Error playing audio: ${err.message}. Using demo content instead.`);
           
-          // Fallback to demo content
           if (audioSource !== demoAudioUrl) {
             if (audioRef.current) {
+              console.log("Trying demo audio instead:", demoAudioUrl);
               audioRef.current.src = demoAudioUrl;
+              audioRef.current.load();
               audioRef.current.play().catch(demoErr => {
                 console.error("Error playing demo audio:", demoErr);
                 setIsPlaying(false);
@@ -179,7 +194,7 @@ const PodcastPreview = ({
           
           toast({
             title: "Audio Playback Error",
-            description: `Could not play audio. Trying fallback audio.`,
+            description: `Format error. Trying fallback audio.`,
             variant: "destructive"
           });
         });
@@ -218,7 +233,6 @@ const PodcastPreview = ({
   }, [isPlaying, duration, mediaType, videoSource, audioSource, toast, demoVideoUrl, demoAudioUrl]);
   
   useEffect(() => {
-    // Set actual duration when media is loaded
     const handleLoadedMetadata = () => {
       const mediaElement = mediaType === 'video' ? videoRef.current : audioRef.current;
       if (mediaElement && !isNaN(mediaElement.duration)) {
@@ -226,7 +240,6 @@ const PodcastPreview = ({
       }
     };
     
-    // Add error handling for the media element
     const handleError = (e: Event) => {
       const target = e.target as HTMLMediaElement;
       console.error(`${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} element error:`, target.error);
@@ -236,12 +249,19 @@ const PodcastPreview = ({
         const errorCode = target.error?.code || 0;
         setVideoError(`Video playback error - ${errorMessage} (code: ${errorCode}). Using demo content instead.`);
         
-        // Fallback to demo content
         if (videoSource !== demoVideoUrl && videoRef.current) {
           videoRef.current.src = demoVideoUrl;
           videoRef.current.load();
+          
+          setTimeout(() => {
+            if (videoRef.current && isPlaying) {
+              videoRef.current.play().catch(demoErr => {
+                console.error("Error playing demo video:", demoErr);
+                setMediaType('audio');
+              });
+            }
+          }, 500);
         } else {
-          // Try switching to audio if available
           setMediaType('audio');
         }
       } else {
@@ -249,15 +269,25 @@ const PodcastPreview = ({
         const errorCode = target.error?.code || 0;
         setAudioError(`Audio playback error - ${errorMessage} (code: ${errorCode}). Using demo content instead.`);
         
-        // Fallback to demo content
         if (audioSource !== demoAudioUrl && audioRef.current) {
           audioRef.current.src = demoAudioUrl;
           audioRef.current.load();
+          
+          setTimeout(() => {
+            if (audioRef.current && isPlaying) {
+              audioRef.current.play().catch(demoErr => {
+                console.error("Error playing demo audio:", demoErr);
+                setIsPlaying(false);
+              });
+            }
+          }, 500);
+        } else {
+          setIsPlaying(false);
         }
         
         toast({
           title: "Audio Playback Error",
-          description: `${errorMessage}. Trying fallback audio.`,
+          description: `Format error. Trying fallback audio.`,
           variant: "destructive"
         });
       }
@@ -277,9 +307,9 @@ const PodcastPreview = ({
       audioElement.addEventListener('loadedmetadata', handleLoadedMetadata);
       audioElement.addEventListener('error', handleError);
       
-      // Add a canplaythrough event to verify the audio can actually be played
       audioElement.addEventListener('canplaythrough', () => {
-        setAudioError(null); // Clear any previous errors once audio is confirmed playable
+        setAudioError(null);
+        console.log("Audio can be played through without buffering");
       });
     }
     
@@ -337,7 +367,6 @@ const PodcastPreview = ({
       return;
     }
     
-    // Determine which file to download - use demo content as fallback
     const downloadUrl = mediaType === 'video' 
       ? (videoError ? demoVideoUrl : videoSource)
       : (audioError ? demoAudioUrl : audioSource);
@@ -348,11 +377,10 @@ const PodcastPreview = ({
       description: `Your podcast ${mediaType} is being prepared for download.`
     });
     
-    // Create a download link and trigger the download
     const a = document.createElement('a');
     a.href = downloadUrl;
     a.download = `podcast-${projectId || 'demo'}-${fileType}`;
-    a.target = '_blank'; // Open in new tab if direct download fails
+    a.target = '_blank';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -363,13 +391,11 @@ const PodcastPreview = ({
     });
   };
   
-  // Toggle between video and audio view
   const toggleMediaType = () => {
     setMediaType(prev => prev === 'video' ? 'audio' : 'video');
     setIsPlaying(false);
   };
   
-  // Log the current media source for debugging
   console.log(`Current ${mediaType} source:`, mediaType === 'video' ? videoSource : audioSource);
 
   return (
@@ -603,7 +629,6 @@ const PodcastPreview = ({
         </TabsContent>
       </Tabs>
       
-      {/* Media format error message */}
       {mediaType === 'audio' && audioError && (
         <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
           <h3 className="text-sm font-medium text-yellow-800">Audio Format Issue</h3>

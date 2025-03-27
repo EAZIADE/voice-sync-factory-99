@@ -322,14 +322,15 @@ serve(async (req: Request) => {
           throw new Error("Failed to generate audio with all available API keys.");
         }
         
-        // Upload audio to Supabase storage
+        // Upload audio to Supabase storage with explicit content type
         console.log(`Attempting to upload audio file to podcasts/${projectId}/audio.mp3`);
         const { error: audioUploadError, data: audioUploadData } = await supabaseClient
           .storage
           .from('podcasts')
           .upload(`${projectId}/audio.mp3`, audioBlob, {
             contentType: 'audio/mpeg',
-            upsert: true
+            upsert: true,
+            cacheControl: '3600'
           });
           
         if (audioUploadError) {
@@ -519,14 +520,15 @@ serve(async (req: Request) => {
           throw new Error("Downloaded video from ElevenLabs is empty");
         }
         
-        // Upload to Supabase storage
+        // Upload to Supabase storage with explicit content type
         console.log(`Attempting to upload video file to podcasts/${projectId}/video.mp4`);
         const { error: uploadError, data: uploadData } = await supabaseClient
           .storage
           .from('podcasts')
           .upload(`${projectId}/video.mp4`, videoBlob, {
             contentType: 'video/mp4',
-            upsert: true
+            upsert: true,
+            cacheControl: '3600'
           });
           
         if (uploadError) {
@@ -536,12 +538,12 @@ serve(async (req: Request) => {
         
         console.log("Successfully uploaded video for project:", projectId, uploadData);
         
-        // Make the files publicly accessible
+        // Make the files publicly accessible and verify with better error logging
         const { data: videoPublicUrlData, error: videoPublicUrlError } = await supabaseClient
           .storage
           .from('podcasts')
           .getPublicUrl(`${projectId}/video.mp4`);
-          
+        
         if (videoPublicUrlError) {
           console.error("Error getting public URL for video:", videoPublicUrlError);
         } else {
@@ -552,20 +554,28 @@ serve(async (req: Request) => {
           .storage
           .from('podcasts')
           .getPublicUrl(`${projectId}/audio.mp3`);
-          
+        
         if (audioPublicUrlError) {
           console.error("Error getting public URL for audio:", audioPublicUrlError);
         } else {
           console.log("Public URL for audio:", audioPublicUrlData.publicUrl);
         }
         
-        // Verify the files exist and are accessible
+        // Verify the files exist and are accessible with improved logging
         try {
-          const videoCheckResponse = await fetch(videoPublicUrlData.publicUrl, { method: 'HEAD' });
-          console.log("Video file check:", videoCheckResponse.status, videoCheckResponse.ok);
+          const videoCheckResponse = await fetch(videoPublicUrlData.publicUrl, { 
+            method: 'HEAD',
+            cache: 'no-store' 
+          });
+          console.log("Video file check:", videoCheckResponse.status, videoCheckResponse.ok, 
+                     "Content-Type:", videoCheckResponse.headers.get('content-type'));
           
-          const audioCheckResponse = await fetch(audioPublicUrlData.publicUrl, { method: 'HEAD' });
-          console.log("Audio file check:", audioCheckResponse.status, audioCheckResponse.ok);
+          const audioCheckResponse = await fetch(audioPublicUrlData.publicUrl, { 
+            method: 'HEAD',
+            cache: 'no-store' 
+          });
+          console.log("Audio file check:", audioCheckResponse.status, audioCheckResponse.ok, 
+                     "Content-Type:", audioCheckResponse.headers.get('content-type'));
           
           if (!videoCheckResponse.ok) {
             console.error("Video file not accessible after upload");
