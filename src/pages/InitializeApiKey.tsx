@@ -1,50 +1,64 @@
 
-import React, { useEffect } from 'react';
-import { useAuth } from '@/context/AuthContext';
-import { addElevenLabsApiKey } from '@/services/api';
-import { useToast } from '@/hooks/use-toast';
-import { ElevenLabsApiKey } from '@/types';
+import React, { useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { fetchElevenLabsApiKeys } from "@/services/api";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import ElevenLabsKeyManager from "@/components/ElevenLabsKeyManager";
 
-// This is a hidden component that will be rendered once to initialize the first API key
 const InitializeApiKey = () => {
   const { user } = useAuth();
-  const { toast } = useToast();
-  const [initialized, setInitialized] = React.useState(false);
-  
+  const [showDialog, setShowDialog] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [hasApiKey, setHasApiKey] = useState(false);
+
   useEffect(() => {
-    const initKey = async () => {
-      if (!user || initialized) return;
-      
+    const checkApiKey = async () => {
+      if (!user) {
+        setIsInitializing(false);
+        return;
+      }
+
       try {
-        // The initial key provided by the user
-        const initialKey = 'sk_2bbde2005ddd09a882f40589fe21daa1a58b4dc38b44e131';
+        const keys = await fetchElevenLabsApiKeys(user.id);
+        const hasActiveKey = keys.some(key => key.is_active);
         
-        await addElevenLabsApiKey({
-          key: initialKey,
-          name: "Initial ElevenLabs Key",
-          is_active: true,
-          user_id: user.id
-        });
-        
-        toast({
-          title: "API Key Initialized",
-          description: "Your ElevenLabs API key has been saved successfully."
-        });
-        
-        setInitialized(true);
+        setHasApiKey(hasActiveKey);
+        setShowDialog(!hasActiveKey);
       } catch (error) {
         console.error("Error initializing API key:", error);
-        // Don't show an error toast as this is happening in the background
+        setShowDialog(true);
+      } finally {
+        setIsInitializing(false);
       }
     };
-    
+
     if (user) {
-      initKey();
+      checkApiKey();
+    } else {
+      setIsInitializing(false);
     }
-  }, [user, toast, initialized]);
-  
-  // This component doesn't render anything
-  return null;
+  }, [user]);
+
+  if (isInitializing || !user) {
+    return null;
+  }
+
+  return (
+    <Dialog open={showDialog} onOpenChange={setShowDialog}>
+      <DialogContent className="max-w-4xl">
+        <DialogHeader>
+          <DialogTitle className="text-2xl">ElevenLabs API Configuration</DialogTitle>
+          <DialogDescription className="text-lg">
+            Configure your ElevenLabs API key to enable AI voice generation for your podcasts
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="mt-4">
+          <ElevenLabsKeyManager />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 };
 
 export default InitializeApiKey;

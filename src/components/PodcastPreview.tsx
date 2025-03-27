@@ -77,62 +77,7 @@ const PodcastPreview = ({
     }
     
     try {
-      console.log(`Validating ${mediaType} URL:`, url);
-      
-      const urlWithCacheBuster = new URL(url);
-      const timestamp = Date.now().toString();
-      
-      // Clear any existing query parameters and add cache busting
-      Array.from(urlWithCacheBuster.searchParams.keys()).forEach(key => {
-        urlWithCacheBuster.searchParams.delete(key);
-      });
-      
-      urlWithCacheBuster.searchParams.append('t', timestamp);
-      
-      const response = await fetch(urlWithCacheBuster.toString(), { 
-        method: 'HEAD',
-        mode: 'cors',
-        cache: 'no-cache',
-        credentials: 'same-origin'
-      });
-      
-      console.log(`${mediaType} URL validation response:`, response.status, response.ok);
-      
-      if (!response.ok) {
-        console.error(`${mediaType} URL returned error:`, response.status);
-        if (mediaType === 'video') {
-          setVideoError(`Video file not available (${response.status})`);
-        } else {
-          setAudioError(`Audio file not available (${response.status})`);
-        }
-        return false;
-      }
-      
-      const contentType = response.headers.get('content-type');
-      console.log(`${mediaType} content type:`, contentType);
-      
-      let isValidContentType = false;
-      
-      if (mediaType === 'video') {
-        isValidContentType = !!contentType && (
-          contentType.includes('video/') || 
-          contentType.includes('application/octet-stream') ||
-          contentType.includes('binary/')
-        );
-      } else {
-        isValidContentType = !!contentType && (
-          contentType.includes('audio/') || 
-          contentType.includes('application/octet-stream') ||
-          contentType.includes('binary/')
-        );
-      }
-      
-      if (!isValidContentType) {
-        console.warn(`Invalid ${mediaType} content type:`, contentType);
-        return false;
-      }
-      
-      console.log(`${mediaType} URL validation successful`);
+      console.log(`Using ${mediaType} URL:`, url);
       return true;
     } catch (err) {
       console.error(`Error checking ${mediaType} URL:`, err);
@@ -176,7 +121,7 @@ const PodcastPreview = ({
       setLoadAttempts(prev => prev + 1);
     };
     
-    const timeoutId = setTimeout(loadMedia, 2000 * Math.min(loadAttempts + 1, 5));
+    const timeoutId = setTimeout(loadMedia, 1000 * Math.min(loadAttempts + 1, 3));
     
     return () => clearTimeout(timeoutId);
   }, [status, videoSource, audioSource, loadAttempts, validateMediaUrl, demoVideoUrl, demoAudioUrl]);
@@ -361,6 +306,22 @@ const PodcastPreview = ({
     setIsPlaying(!isPlaying);
   };
   
+  const handleSwitch = () => {
+    console.log("Attempting to switch from", mediaType, "to", mediaType === 'video' ? 'audio' : 'video');
+    if (mediaType === 'video') {
+      setMediaType('audio');
+    } else {
+      if (videoError) {
+        toast.error("Video playback error", {
+          description: "Cannot switch to video due to playback issues"
+        });
+      } else {
+        setMediaType('video');
+      }
+    }
+    setIsPlaying(false);
+  };
+  
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -418,11 +379,6 @@ const PodcastPreview = ({
     toast.info("Download initiated", {
       description: `If download doesn't start automatically, right-click on the media player and select 'Save as'.`
     });
-  };
-  
-  const toggleMediaType = () => {
-    setMediaType(prev => prev === 'video' ? 'audio' : 'video');
-    setIsPlaying(false);
   };
   
   return (
@@ -513,7 +469,7 @@ const PodcastPreview = ({
             
             <div className="mt-4 flex justify-end">
               <button 
-                onClick={toggleMediaType}
+                onClick={handleSwitch}
                 className="text-xs flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors px-2 py-1 rounded-full bg-secondary/20"
               >
                 {mediaType === 'video' ? (
