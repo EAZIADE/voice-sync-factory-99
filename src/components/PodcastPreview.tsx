@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from "react";
 import { GlassCard, GlassPanel } from "./ui/GlassMorphism";
 import { AnimatedButton } from "./ui/AnimatedButton";
@@ -26,6 +27,7 @@ const PodcastPreview = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(225); // 3:45 in seconds
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [audioError, setAudioError] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'video' | 'audio'>('video');
   const [characterControls, setCharacterControls] = useState<CharacterControlState>({
     expressiveness: 70,
@@ -51,9 +53,51 @@ const PodcastPreview = ({
     ? audioUrl
     : demoAudioUrl;
   
+  // Validate media URLs before using them
+  const validateMediaUrl = async (url: string, mediaType: 'video' | 'audio'): Promise<boolean> => {
+    try {
+      const response = await fetch(url, { method: 'HEAD' });
+      
+      if (!response.ok) {
+        console.error(`${mediaType} URL returned error:`, response.status);
+        if (mediaType === 'video') {
+          setVideoError(`Video not available (${response.status})`);
+        } else {
+          setAudioError(`Audio not available (${response.status})`);
+        }
+        return false;
+      }
+      
+      // Check content type for appropriate media type
+      const contentType = response.headers.get('content-type');
+      if (mediaType === 'video' && contentType && !contentType.includes('video/')) {
+        console.error('Invalid video content type:', contentType);
+        setVideoError('Invalid video format');
+        return false;
+      }
+      
+      if (mediaType === 'audio' && contentType && !contentType.includes('audio/')) {
+        console.error('Invalid audio content type:', contentType);
+        setAudioError('Invalid audio format');
+        return false;
+      }
+      
+      return true;
+    } catch (err) {
+      console.error(`Error checking ${mediaType} URL:`, err);
+      if (mediaType === 'video') {
+        setVideoError(`Error accessing video source`);
+      } else {
+        setAudioError(`Error accessing audio source`);
+      }
+      return false;
+    }
+  };
+  
   useEffect(() => {
-    // Reset video error when source changes
+    // Reset errors when source changes
     setVideoError(null);
+    setAudioError(null);
     
     console.log("Media source updates - Video:", videoSource, "Audio:", audioSource);
     
@@ -63,28 +107,26 @@ const PodcastPreview = ({
         if (!previewUrl.startsWith('http')) {
           console.error("Invalid video URL:", previewUrl);
           setVideoError("Invalid video URL format");
+          // Try using audio instead
           setMediaType('audio');
           return;
         }
         
-        fetch(previewUrl, { method: 'HEAD' })
-          .then(response => {
-            if (!response.ok) {
-              console.error("Video URL returned error:", response.status);
-              setVideoError(`Video not available (${response.status})`);
+        validateMediaUrl(previewUrl, 'video')
+          .then(valid => {
+            if (!valid) {
               // Try using audio instead
               setMediaType('audio');
             }
-          })
-          .catch(err => {
-            console.error("Error checking video URL:", err);
-            setVideoError("Error accessing video source");
-            // Try using audio instead
-            setMediaType('audio');
           });
       } else if (audioUrl) {
         // If no video but we have audio, default to audio
         setMediaType('audio');
+      }
+      
+      // Also validate audio URL if we have one
+      if (audioUrl && audioUrl.startsWith('http')) {
+        validateMediaUrl(audioUrl, 'audio');
       }
     }
   }, [status, previewUrl, audioUrl]);
@@ -103,6 +145,7 @@ const PodcastPreview = ({
             setMediaType('audio');
             audioRef.current.play().catch(audioErr => {
               console.error("Error playing audio fallback:", audioErr);
+              setAudioError(`Error playing audio: ${audioErr.message}`);
               setIsPlaying(false);
             });
           } else {
@@ -112,7 +155,14 @@ const PodcastPreview = ({
       } else if (mediaType === 'audio' && audioRef.current) {
         audioRef.current.play().catch(err => {
           console.error("Error playing audio:", err);
+          setAudioError(`Error playing audio: ${err.message}`);
           setIsPlaying(false);
+          
+          toast({
+            title: "Audio Playback Error",
+            description: `Could not play audio: ${err.message}. Try downloading instead.`,
+            variant: "destructive"
+          });
         });
       }
       
@@ -163,19 +213,27 @@ const PodcastPreview = ({
       console.error(`${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} element error:`, target.error);
       
       if (mediaType === 'video') {
-        setVideoError(`Video playback error - ${target.error?.message || 'unknown error'}`);
+        const errorMessage = target.error?.message || 'unknown error';
+        const errorCode = target.error?.code || 0;
+        setVideoError(`Video playback error - ${errorMessage} (code: ${errorCode})`);
         
         // Try switching to audio if available
         if (audioUrl) {
           setMediaType('audio');
         }
       } else {
+        const errorMessage = target.error?.message || 'unknown error';
+        const errorCode = target.error?.code || 0;
+        setAudioError(`Audio playback error - ${errorMessage} (code: ${errorCode})`);
+        
         toast({
           title: "Audio Playback Error",
-          description: target.error?.message || "Unknown audio error",
+          description: `${errorMessage}. Try downloading the file instead.`,
           variant: "destructive"
         });
       }
+      
+      setIsPlaying(false);
     };
     
     const videoElement = videoRef.current;
@@ -189,6 +247,11 @@ const PodcastPreview = ({
     if (audioElement) {
       audioElement.addEventListener('loadedmetadata', handleLoadedMetadata);
       audioElement.addEventListener('error', handleError);
+      
+      // Add a canplaythrough event to verify the audio can actually be played
+      audioElement.addEventListener('canplaythrough', () => {
+        setAudioError(null); // Clear any previous errors once audio is confirmed playable
+      });
     }
     
     return () => {
@@ -200,6 +263,7 @@ const PodcastPreview = ({
       if (audioElement) {
         audioElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
         audioElement.removeEventListener('error', handleError);
+        audioElement.removeEventListener('canplaythrough', () => {});
       }
     };
   }, [mediaType, toast, audioUrl]);
@@ -253,18 +317,43 @@ const PodcastPreview = ({
       description: `Your podcast ${mediaType} is being prepared for download.`
     });
     
-    // Download the file
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `podcast-${projectId || 'demo'}-${fileType}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    toast({
-      title: "Download complete",
-      description: `Your podcast ${mediaType} has been downloaded successfully.`
-    });
+    // Try to fetch the file first to verify it exists
+    fetch(downloadUrl, { method: 'HEAD' })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`File not found (${response.status})`);
+        }
+        return response.headers.get('content-type');
+      })
+      .then(contentType => {
+        if (mediaType === 'video' && contentType && !contentType.includes('video/')) {
+          throw new Error(`Invalid file format: ${contentType}`);
+        }
+        if (mediaType === 'audio' && contentType && !contentType.includes('audio/')) {
+          throw new Error(`Invalid file format: ${contentType}`);
+        }
+        
+        // Download the file
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `podcast-${projectId || 'demo'}-${fileType}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        toast({
+          title: "Download complete",
+          description: `Your podcast ${mediaType} has been downloaded successfully.`
+        });
+      })
+      .catch(error => {
+        console.error("Download error:", error);
+        toast({
+          title: "Download failed",
+          description: `Error: ${error.message}. Please try again later.`,
+          variant: "destructive"
+        });
+      });
   };
   
   // Toggle between video and audio view
@@ -294,7 +383,7 @@ const PodcastPreview = ({
                   src={videoSource}
                   controls
                   playsInline
-                  preload="auto"
+                  preload="metadata"
                   crossOrigin="anonymous"
                   onClick={togglePlayback}
                   onEnded={() => setIsPlaying(false)}
@@ -317,13 +406,19 @@ const PodcastPreview = ({
                   <audio 
                     ref={audioRef}
                     src={audioSource}
-                    preload="auto"
+                    preload="metadata"
                     onEnded={() => setIsPlaying(false)}
                     onError={(e) => {
                       console.error("Audio element error:", e);
+                      const target = e.currentTarget;
+                      const errorMessage = target.error?.message || "Unknown audio error";
+                      const errorCode = target.error?.code || 0;
+                      
+                      setAudioError(`Audio error: ${errorMessage} (code: ${errorCode})`);
+                      
                       toast({
                         title: "Audio Playback Error",
-                        description: "Unable to load audio file",
+                        description: `${errorMessage}. Try downloading the file instead.`,
                         variant: "destructive"
                       });
                     }}
@@ -332,19 +427,19 @@ const PodcastPreview = ({
                 </>
               )}
               
-              {(!isPlaying || status === 'processing' || videoError || generationError) && (
+              {(!isPlaying || status === 'processing' || videoError || audioError || generationError) && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/30 backdrop-blur-sm">
                   <button 
                     className="w-16 h-16 rounded-full bg-primary/80 backdrop-blur-sm flex items-center justify-center transition-transform hover:scale-110 animate-pulse-soft"
                     onClick={togglePlayback}
-                    disabled={status === 'processing' || !!videoError || !!generationError}
+                    disabled={status === 'processing' || !!videoError || !!audioError || !!generationError}
                   >
                     {status === 'processing' ? (
                       <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                    ) : videoError || generationError ? (
+                    ) : videoError || audioError || generationError ? (
                       <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
                         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
                         <line x1="12" y1="9" x2="12" y2="13"></line>
@@ -361,13 +456,15 @@ const PodcastPreview = ({
                       ? "Generate podcast to preview" 
                       : status === 'processing' 
                         ? "Processing your podcast with ElevenLabs..." 
-                        : videoError
+                        : videoError && mediaType === 'video'
                           ? videoError
-                          : generationError
-                            ? "Generation error - see details below"
-                            : isPlaying 
-                              ? "Click to pause preview" 
-                              : "Click to play preview"}
+                          : audioError && mediaType === 'audio'
+                            ? audioError
+                            : generationError
+                              ? "Generation error - see details below"
+                              : isPlaying 
+                                ? "Click to pause preview" 
+                                : "Click to play preview"}
                   </p>
                 </div>
               )}
@@ -428,7 +525,7 @@ const PodcastPreview = ({
                           setCurrentTime(mediaElement.currentTime);
                         }
                       }}
-                      disabled={status === 'processing' || !!videoError || !!generationError}
+                      disabled={status === 'processing' || !!videoError || !!audioError || !!generationError}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polygon points="19 20 9 12 19 4 19 20"></polygon>
@@ -438,7 +535,7 @@ const PodcastPreview = ({
                     <button 
                       className="p-2 hover:text-primary transition-colors"
                       onClick={togglePlayback}
-                      disabled={status === 'processing' || !!videoError || !!generationError}
+                      disabled={status === 'processing' || !!videoError || !!audioError || !!generationError}
                     >
                       {isPlaying ? (
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -460,7 +557,7 @@ const PodcastPreview = ({
                           setCurrentTime(mediaElement.currentTime);
                         }
                       }}
-                      disabled={status === 'processing' || !!videoError || !!generationError}
+                      disabled={status === 'processing' || !!videoError || !!audioError || !!generationError}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polygon points="5 4 15 12 5 20 5 4"></polygon>
@@ -518,6 +615,21 @@ const PodcastPreview = ({
           <CharacterControls onControlsChange={handleControlsChange} />
         </TabsContent>
       </Tabs>
+      
+      {/* Audio format error message */}
+      {mediaType === 'audio' && audioError && (
+        <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+          <h3 className="text-sm font-medium text-yellow-800">Audio Format Issue</h3>
+          <p className="mt-1 text-xs text-yellow-700">
+            There may be an issue with the audio format. Try the following:
+          </p>
+          <ul className="mt-2 text-xs text-yellow-700 list-disc pl-4 space-y-1">
+            <li>Download the file and play it with a different player</li>
+            <li>Try generating the podcast again</li>
+            <li>Switch to video format if available</li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 };

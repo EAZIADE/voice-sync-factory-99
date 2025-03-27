@@ -17,6 +17,7 @@ const ProjectDetail = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [mediaUrls, setMediaUrls] = useState<{video?: string, audio?: string}>({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -202,6 +203,59 @@ const ProjectDetail = () => {
     }
   };
 
+  // Update this useEffect hook to verify media URLs when status changes to completed
+  useEffect(() => {
+    if (!project || project.status !== 'completed' || !id) return;
+    
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cvfqcvytoobplgracobg.supabase.co';
+    
+    const videoUrl = `${supabaseUrl}/storage/v1/object/public/podcasts/${id}/video.mp4`;
+    const audioUrl = `${supabaseUrl}/storage/v1/object/public/podcasts/${id}/audio.mp3`;
+    
+    console.log("Project completed, setting media URLs:");
+    console.log("Video URL:", videoUrl);
+    console.log("Audio URL:", audioUrl);
+    
+    // Verify the URLs are valid with HEAD requests
+    const checkUrl = async (url: string, mediaType: 'video' | 'audio') => {
+      try {
+        const response = await fetch(url, { method: 'HEAD' });
+        
+        if (!response.ok) {
+          console.error(`${mediaType} URL check failed:`, response.status);
+          return false;
+        }
+        
+        console.log(`${mediaType} URL verified with status:`, response.status);
+        return true;
+      } catch (err) {
+        console.error(`Error checking ${mediaType} URL:`, err);
+        return false;
+      }
+    };
+    
+    // Check both URLs and update state accordingly
+    const verifyMediaUrls = async () => {
+      const videoValid = await checkUrl(videoUrl, 'video');
+      const audioValid = await checkUrl(audioUrl, 'audio');
+      
+      setMediaUrls({
+        video: videoValid ? videoUrl : undefined,
+        audio: audioValid ? audioUrl : undefined
+      });
+      
+      if (!videoValid && !audioValid) {
+        toast({
+          title: "Media Not Available",
+          description: "The podcast files are not accessible. You may need to regenerate the podcast.",
+          variant: "destructive"
+        });
+      }
+    };
+    
+    verifyMediaUrls();
+  }, [project?.status, id, toast]);
+
   if (!loading && !user) {
     return <Navigate to="/auth" replace />;
   }
@@ -240,19 +294,16 @@ const ProjectDetail = () => {
     );
   }
 
-  // Fix the URL construction by ensuring the Supabase URL is properly included
+  // Get URLs from state or generate them if not yet verified
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cvfqcvytoobplgracobg.supabase.co';
   
-  const videoUrl = (project?.status === 'completed' && project?.id)
+  const videoUrl = mediaUrls.video || (project?.status === 'completed' && project?.id 
     ? `${supabaseUrl}/storage/v1/object/public/podcasts/${project.id}/video.mp4` 
-    : undefined;
+    : undefined);
   
-  const audioUrl = (project?.status === 'completed' && project?.id)
+  const audioUrl = mediaUrls.audio || (project?.status === 'completed' && project?.id
     ? `${supabaseUrl}/storage/v1/object/public/podcasts/${project.id}/audio.mp3` 
-    : undefined;
-  
-  console.log("Video URL:", videoUrl);
-  console.log("Audio URL:", audioUrl);
+    : undefined);
 
   return (
     <div className="min-h-screen bg-background">
