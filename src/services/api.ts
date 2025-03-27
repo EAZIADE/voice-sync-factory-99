@@ -1,6 +1,7 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { Host, Template, Language, Project, ElevenLabsApiKey } from "@/types";
-import './integrations/supabase/type-extensions';
+import "@/integrations/supabase/type-extensions";
 
 // Host related API calls
 export const fetchHosts = async (): Promise<Host[]> => {
@@ -106,24 +107,26 @@ export const updateProject = async (id: string, updates: Partial<Project>): Prom
 // ElevenLabs API Key Management
 export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabsApiKey[]> => {
   try {
-    const { data, error } = await supabase
+    // First try using RPC if available
+    const { data: rpcData, error: rpcError } = await supabase
       .rpc('get_elevenlabs_api_keys', { user_id_param: userId });
     
+    if (!rpcError && rpcData) {
+      return rpcData as unknown as ElevenLabsApiKey[];
+    }
+    
+    // Fallback to direct query if RPC fails or is unavailable
+    console.log("RPC failed or unavailable, falling back to direct query");
+    const { data, error } = await supabase
+      .from('elevenlabs_api_keys')
+      .select('*')
+      .eq('user_id', userId)
+      .order('is_active', { ascending: false })
+      .order('created_at', { ascending: false });
+    
     if (error) {
-      console.error('Error fetching ElevenLabs API keys with RPC:', error);
-      const { data: rawData, error: rawError } = await supabase
-        .from('elevenlabs_api_keys')
-        .select('*')
-        .eq('user_id', userId)
-        .order('is_active', { ascending: false })
-        .order('created_at', { ascending: false });
-      
-      if (rawError) {
-        console.error('Error fetching ElevenLabs API keys (fallback):', rawError);
-        throw rawError;
-      }
-      
-      return rawData as unknown as ElevenLabsApiKey[];
+      console.error('Error fetching ElevenLabs API keys:', error);
+      throw error;
     }
     
     return data as unknown as ElevenLabsApiKey[];
@@ -142,7 +145,7 @@ export const addElevenLabsApiKey = async (keyData: Omit<ElevenLabsApiKey, 'id' |
   
   const { data, error } = await supabase
     .from('elevenlabs_api_keys')
-    .insert([keyData as any])
+    .insert([keyData])
     .select('*')
     .single();
   
@@ -157,7 +160,7 @@ export const addElevenLabsApiKey = async (keyData: Omit<ElevenLabsApiKey, 'id' |
 export const updateElevenLabsApiKey = async (id: string, updates: Partial<ElevenLabsApiKey>): Promise<ElevenLabsApiKey> => {
   const { data, error } = await supabase
     .from('elevenlabs_api_keys')
-    .update(updates as any)
+    .update(updates)
     .eq('id', id)
     .select('*')
     .single();

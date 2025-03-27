@@ -1,5 +1,5 @@
 
-import { Database } from './types';
+import { Database as SupabaseDatabase } from './types';
 
 // Extend the Database type to include our elevenlabs_api_keys table
 declare module './types' {
@@ -49,14 +49,14 @@ declare module './types' {
             }
           ];
         };
-      } & Database['public']['Tables'];
-      Views: Database['public']['Views'];
-      Functions: Database['public']['Functions'];
-      Enums: Database['public']['Enums'];
-      CompositeTypes: Database['public']['CompositeTypes'];
+      } & SupabaseDatabase['public']['Tables'];
+      Views: SupabaseDatabase['public']['Views'];
+      Functions: SupabaseDatabase['public']['Functions'];
+      Enums: SupabaseDatabase['public']['Enums'];
+      CompositeTypes: SupabaseDatabase['public']['CompositeTypes'];
     };
   }
 }
 
-// Re-export for convenience
-export type { Database };
+// Export types for use in other files
+export type { SupabaseDatabase };
