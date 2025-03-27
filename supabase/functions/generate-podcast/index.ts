@@ -1,3 +1,4 @@
+
 // Function to generate AI podcasts with character animation using ElevenLabs API
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.23.0";
@@ -48,11 +49,26 @@ serve(async (req: Request) => {
     
     if (!authHeader) {
       return new Response(
-        JSON.stringify({ error: "No authorization header" }),
+        JSON.stringify({ error: "No authorization header. Make sure you're logged in." }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    // Extract JWT token from the Authorization header
+    let token;
+    if (authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    } else {
+      token = authHeader; // The header might already be just the token
+    }
+    
+    if (!token) {
+      return new Response(
+        JSON.stringify({ error: "Invalid authorization format. No bearer token found." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     // Create a Supabase client with the auth header
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
@@ -70,7 +86,14 @@ serve(async (req: Request) => {
     const supabaseClient = createClient(
       supabaseUrl,
       supabaseAnonKey,
-      { global: { headers: { Authorization: authHeader } } }
+      { 
+        global: { 
+          headers: { Authorization: `Bearer ${token}` } 
+        },
+        auth: {
+          persistSession: false
+        }
+      }
     );
     
     // First verify the project exists and belongs to the user
@@ -112,7 +135,7 @@ serve(async (req: Request) => {
     if (!user) {
       console.error("No authenticated user found");
       return new Response(
-        JSON.stringify({ error: "Not authenticated" }),
+        JSON.stringify({ error: "Not authenticated. Please log in again." }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

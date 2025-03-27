@@ -9,12 +9,18 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    storage: typeof window !== 'undefined' ? localStorage : undefined
+  }
+});
 
 // Media file utilities
 export const getMediaUrl = (projectId: string, type: 'video' | 'audio'): string => {
   const fileName = type === 'video' ? 'video.mp4' : 'audio.mp3';
-  return `${SUPABASE_URL}/storage/v1/object/public/podcasts/${projectId}/${fileName}`;
+  return `${SUPABASE_URL}/storage/v1/object/public/podcasts/${projectId}/${fileName}?t=${Date.now()}`; // Add timestamp to prevent caching issues
 };
 
 export const checkMediaFileExists = async (projectId: string, type: 'video' | 'audio'): Promise<boolean> => {
@@ -54,20 +60,25 @@ export const checkMediaFileExists = async (projectId: string, type: 'video' | 'a
     }
     
     // Make a HEAD request to check if the file exists and is accessible
-    const response = await fetch(data.publicUrl, { 
-      method: 'HEAD',
-      cache: 'no-store' // Prevent caching to ensure we get the latest status
-    });
-    
-    console.log(`${type} file check result:`, {
-      status: response.status,
-      ok: response.ok,
-      contentType: response.headers.get('content-type'),
-      contentLength: response.headers.get('content-length'),
-      url: data.publicUrl
-    });
-    
-    return response.ok;
+    try {
+      const response = await fetch(data.publicUrl, { 
+        method: 'HEAD',
+        cache: 'no-store' // Prevent caching to ensure we get the latest status
+      });
+      
+      console.log(`${type} file check result:`, {
+        status: response.status,
+        ok: response.ok,
+        contentType: response.headers.get('content-type'),
+        contentLength: response.headers.get('content-length'),
+        url: data.publicUrl
+      });
+      
+      return response.ok;
+    } catch (fetchError) {
+      console.error(`Error fetching ${type} file:`, fetchError);
+      return false;
+    }
   } catch (error) {
     console.error(`Error checking if ${type} file exists:`, error);
     return false;
@@ -91,7 +102,26 @@ export const ensurePodcastsBucketExists = async (): Promise<boolean> => {
     
     if (!podcastsBucketExists) {
       console.error("Podcasts bucket does not exist in buckets list:", buckets.map(b => b.name));
-      return false;
+      
+      // Try to create the bucket if it doesn't exist
+      try {
+        const { error: createError } = await supabase
+          .storage
+          .createBucket('podcasts', {
+            public: true,
+            fileSizeLimit: 512000000, // 512MB
+          });
+        
+        if (createError) {
+          console.error("Error creating podcasts bucket:", createError);
+          return false;
+        }
+        
+        console.log("Successfully created podcasts bucket");
+      } catch (createBucketError) {
+        console.error("Exception creating podcasts bucket:", createBucketError);
+        return false;
+      }
     }
     
     // Verify we can actually access the bucket
@@ -124,6 +154,17 @@ export const downloadMediaFile = async (projectId: string, type: 'video' | 'audi
     const fileName = type === 'video' ? 'video.mp4' : 'audio.mp3';
     const path = `${projectId}/${fileName}`;
     
+    // First check if the file exists
+    const fileExists = await checkMediaFileExists(projectId, type);
+    if (!fileExists) {
+      return { 
+        url: getMediaUrl(projectId, type), 
+        success: false, 
+        message: `${type.charAt(0).toUpperCase() + type.slice(1)} file not found` 
+      };
+    }
+    
+    // Try to download the file
     const { data, error } = await supabase
       .storage
       .from('podcasts')
@@ -148,7 +189,8 @@ export const downloadMediaFile = async (projectId: string, type: 'video' | 'audi
     }
     
     // Create a blob URL for the downloaded file
-    const blob = new Blob([data], { type: type === 'video' ? 'video/mp4' : 'audio/mpeg' });
+    const contentType = type === 'video' ? 'video/mp4' : 'audio/mpeg';
+    const blob = new Blob([data], { type: contentType });
     const blobUrl = URL.createObjectURL(blob);
     
     return { url: blobUrl, success: true };

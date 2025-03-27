@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import CharacterControls from "./CharacterControls";
 import ContentSourceInput from "./ContentSourceInput";
+import { toast } from "sonner";
 
 interface ProjectGeneratorProps {
   project: Project;
@@ -33,7 +34,7 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
     autoGestures: true,
     eyeContact: true,
   });
-  const { toast } = useToast();
+  const { toast: hookToast } = useToast();
 
   const handleSourceSelected = async (source: ContentSource) => {
     try {
@@ -101,7 +102,41 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
       console.log("Generating podcast with URL:", `${supabaseUrl}/functions/v1/generate-podcast`);
       console.log("Project ID:", project.id);
       console.log("Character controls:", characterControls);
+      console.log("Session access token:", session.access_token ? "Present" : "Missing");
       
+      // First check if we are authenticated properly
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) {
+        console.error("Auth check failed:", userError);
+        throw new Error("Authentication check failed. Please try logging in again.");
+      }
+      
+      // Try the function call using Supabase client first
+      try {
+        const { data, error } = await supabase.functions.invoke('generate-podcast', {
+          body: JSON.stringify({ 
+            projectId: project.id,
+            characterControls
+          })
+        });
+        
+        if (error) throw error;
+        
+        console.log("Generation response:", data);
+        
+        toast({
+          title: "Podcast generation started",
+          description: "Your AI podcast is being generated. This may take a few minutes.",
+        });
+        
+        onGenerateSuccess();
+        return;
+      } catch (fnError) {
+        console.error("Error using supabase.functions.invoke:", fnError);
+        // Fall back to direct fetch if invoke fails
+      }
+      
+      // Fallback to direct fetch with explicit authentication
       const response = await fetch(`${supabaseUrl}/functions/v1/generate-podcast`, {
         method: 'POST',
         headers: {
