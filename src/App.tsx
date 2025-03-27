@@ -11,6 +11,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import ProjectDetail from "./pages/ProjectDetail";
 import NotFound from "./pages/NotFound";
+import InitializeApiKey from "./pages/InitializeApiKey";
 
 const queryClient = new QueryClient();
 
@@ -21,6 +22,7 @@ const App = () => (
         <AppProvider>
           <Toaster />
           <Sonner />
+          <InitializeApiKey />
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Index />} />

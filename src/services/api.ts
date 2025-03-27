@@ -104,7 +104,154 @@ export const updateProject = async (id: string, updates: Partial<Project>): Prom
   };
 };
 
-// ElevenLabs API functions
+// ElevenLabs API Key Management
+export interface ElevenLabsApiKey {
+  id?: string;
+  key: string;
+  name: string;
+  is_active: boolean;
+  quota_remaining?: number;
+  last_used?: string;
+  created_at?: string;
+  user_id?: string;
+}
+
+export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabsApiKey[]> => {
+  const { data, error } = await supabase
+    .from('elevenlabs_api_keys')
+    .select('*')
+    .eq('user_id', userId)
+    .order('is_active', { ascending: false })
+    .order('created_at', { ascending: false });
+  
+  if (error) {
+    console.error('Error fetching ElevenLabs API keys:', error);
+    throw error;
+  }
+  
+  return data || [];
+};
+
+export const addElevenLabsApiKey = async (keyData: Omit<ElevenLabsApiKey, 'id' | 'created_at'>): Promise<ElevenLabsApiKey> => {
+  // Check if the key is valid by making a test request to ElevenLabs
+  try {
+    await validateElevenLabsApiKey(keyData.key);
+  } catch (error) {
+    throw new Error('Invalid ElevenLabs API key. Please check and try again.');
+  }
+  
+  const { data, error } = await supabase
+    .from('elevenlabs_api_keys')
+    .insert([keyData])
+    .select()
+    .single();
+  
+  if (error) {
+    console.error('Error adding ElevenLabs API key:', error);
+    throw error;
+  }
+  
+  return data;
+};
+
+export const updateElevenLabsApiKey = async (id: string, updates: Partial<ElevenLabsApiKey>): Promise<ElevenLabsApiKey> => {
+  const { data, error } = await supabase
+    .from('elevenlabs_api_keys')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+  
+  if (error) {
+    console.error('Error updating ElevenLabs API key:', error);
+    throw error;
+  }
+  
+  return data;
+};
+
+export const deleteElevenLabsApiKey = async (id: string): Promise<void> => {
+  const { error } = await supabase
+    .from('elevenlabs_api_keys')
+    .delete()
+    .eq('id', id);
+  
+  if (error) {
+    console.error('Error deleting ElevenLabs API key:', error);
+    throw error;
+  }
+};
+
+export const validateElevenLabsApiKey = async (apiKey: string): Promise<{valid: boolean, subscription: any}> => {
+  // Check if the key is valid by making a request to ElevenLabs
+  const response = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
+    method: 'GET',
+    headers: {
+      'xi-api-key': apiKey
+    }
+  });
+  
+  if (!response.ok) {
+    throw new Error(`ElevenLabs API key validation failed: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  return { valid: true, subscription: data };
+};
+
+// Get a valid ElevenLabs API key with remaining quota
+export const getActiveElevenLabsApiKey = async (userId: string): Promise<string> => {
+  const keys = await fetchElevenLabsApiKeys(userId);
+  
+  if (keys.length === 0) {
+    throw new Error('No ElevenLabs API keys found. Please add a key in your dashboard.');
+  }
+  
+  // First try to use an active key with known quota
+  const activeKeysWithQuota = keys.filter(k => k.is_active && (k.quota_remaining === undefined || k.quota_remaining > 0));
+  
+  if (activeKeysWithQuota.length > 0) {
+    // Use the key with highest quota or most recently added if quota is undefined
+    const selectedKey = activeKeysWithQuota.sort((a, b) => {
+      if (a.quota_remaining !== undefined && b.quota_remaining !== undefined) {
+        return b.quota_remaining - a.quota_remaining;
+      }
+      return new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime();
+    })[0];
+    
+    // Update last_used timestamp
+    await updateElevenLabsApiKey(selectedKey.id!, {
+      last_used: new Date().toISOString()
+    });
+    
+    return selectedKey.key;
+  }
+  
+  // If no active keys with known quota, try to validate all inactive keys
+  for (const key of keys.filter(k => !k.is_active)) {
+    try {
+      const { subscription } = await validateElevenLabsApiKey(key.key);
+      const quotaRemaining = subscription.character_limit - subscription.character_count;
+      
+      if (quotaRemaining > 0) {
+        // Activate this key and update its quota
+        await updateElevenLabsApiKey(key.id!, {
+          is_active: true,
+          quota_remaining: quotaRemaining,
+          last_used: new Date().toISOString()
+        });
+        
+        return key.key;
+      }
+    } catch (error) {
+      continue; // Try the next key
+    }
+  }
+  
+  throw new Error('All ElevenLabs API keys have reached their quota. Please add a new key.');
+};
+
+// Functions related to ElevenLabs voices
 export interface ElevenLabsVoice {
   voice_id: string;
   name: string;
@@ -131,126 +278,222 @@ export interface ElevenLabsVoice {
 export const generatePodcastAudio = async (
   text: string, 
   voiceId: string = "21m00Tcm4TlvDq8ikWAM", // Default to Rachel
-  apiKey: string
+  userId: string
 ): Promise<Blob> => {
-  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'xi-api-key': apiKey
-    },
-    body: JSON.stringify({
-      text,
-      model_id: "eleven_monolingual_v1",
-      voice_settings: {
-        stability: 0.5,
-        similarity_boost: 0.75
+  try {
+    const apiKey = await getActiveElevenLabsApiKey(userId);
+    
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey
+      },
+      body: JSON.stringify({
+        text,
+        model_id: "eleven_monolingual_v1",
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75
+        }
+      })
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      
+      // Check if this is a quota exceeded error
+      if (response.status === 429 || errorText.includes('quota') || errorText.includes('limit')) {
+        // Mark this key as inactive and try again with a different key
+        const keys = await fetchElevenLabsApiKeys(userId);
+        const currentKey = keys.find(k => k.key === apiKey);
+        
+        if (currentKey) {
+          await updateElevenLabsApiKey(currentKey.id!, {
+            is_active: false,
+            quota_remaining: 0
+          });
+        }
+        
+        // Retry with a different key
+        return generatePodcastAudio(text, voiceId, userId);
       }
-    })
-  });
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`ElevenLabs API error: ${response.status} ${errorText}`);
+      
+      throw new Error(`ElevenLabs API error: ${response.status} ${errorText}`);
+    }
+    
+    // Update the key's usage stats after successful generation
+    try {
+      const keys = await fetchElevenLabsApiKeys(userId);
+      const usedKey = keys.find(k => k.key === apiKey);
+      
+      if (usedKey) {
+        const { subscription } = await validateElevenLabsApiKey(apiKey);
+        const quotaRemaining = subscription.character_limit - subscription.character_count;
+        
+        await updateElevenLabsApiKey(usedKey.id!, {
+          quota_remaining: quotaRemaining,
+          last_used: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('Error updating key usage stats:', error);
+      // Don't fail the audio generation if this fails
+    }
+    
+    return await response.blob();
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('All ElevenLabs API keys have reached their quota')) {
+      throw error; // Rethrow quota error
+    }
+    
+    console.error('Error generating audio:', error);
+    throw new Error('Failed to generate audio. Please try again or check your API keys.');
   }
-  
-  return await response.blob();
 };
 
 // Generate avatar video with ElevenLabs
 export const generateAvatarVideo = async (
   audioBlob: Blob,
   voiceId: string = "21m00Tcm4TlvDq8ikWAM",
-  apiKey: string
+  userId: string
 ): Promise<string> => {
-  // 1. Create conversion
-  const conversionResponse = await fetch("https://api.elevenlabs.io/v1/speech-to-speech/convert", {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'xi-api-key': apiKey
-    },
-    body: JSON.stringify({
-      voice_id: voiceId,
-      generation_config: {
-        model_id: "eleven_english_sts_v2"
-      }
-    })
-  });
-  
-  if (!conversionResponse.ok) {
-    const errorText = await conversionResponse.text();
-    throw new Error(`ElevenLabs conversion API error: ${conversionResponse.status} ${errorText}`);
-  }
-  
-  const conversionData = await conversionResponse.json();
-  const conversionId = conversionData.conversion_id;
-  
-  // 2. Upload audio
-  const formData = new FormData();
-  formData.append('audio', audioBlob, 'audio.mp3');
-  
-  const uploadResponse = await fetch(`https://api.elevenlabs.io/v1/speech-to-speech/convert/${conversionId}/audio`, {
-    method: 'POST',
-    headers: {
-      'xi-api-key': apiKey
-    },
-    body: formData
-  });
-  
-  if (!uploadResponse.ok) {
-    const errorText = await uploadResponse.text();
-    throw new Error(`ElevenLabs upload API error: ${uploadResponse.status} ${errorText}`);
-  }
-  
-  // 3. Start conversion
-  const startResponse = await fetch(`https://api.elevenlabs.io/v1/speech-to-speech/convert/${conversionId}/start`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'xi-api-key': apiKey
-    },
-    body: JSON.stringify({})
-  });
-  
-  if (!startResponse.ok) {
-    const errorText = await startResponse.text();
-    throw new Error(`ElevenLabs start conversion API error: ${startResponse.status} ${errorText}`);
-  }
-  
-  // 4. Poll for completion
-  let videoUrl = "";
-  let maxAttempts = 30; // 5 minutes (30 * 10s)
-  
-  for (let i = 0; i < maxAttempts; i++) {
-    await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+  try {
+    const apiKey = await getActiveElevenLabsApiKey(userId);
     
-    const statusResponse = await fetch(`https://api.elevenlabs.io/v1/speech-to-speech/convert/${conversionId}`, {
-      method: 'GET',
+    // 1. Create conversion
+    const conversionResponse = await fetch("https://api.elevenlabs.io/v1/speech-to-speech/convert", {
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         'xi-api-key': apiKey
-      }
+      },
+      body: JSON.stringify({
+        voice_id: voiceId,
+        generation_config: {
+          model_id: "eleven_english_sts_v2"
+        }
+      })
     });
     
-    if (!statusResponse.ok) {
-      continue;
+    if (!conversionResponse.ok) {
+      const errorText = await conversionResponse.text();
+      
+      // Check if this is a quota exceeded error
+      if (conversionResponse.status === 429 || errorText.includes('quota') || errorText.includes('limit')) {
+        // Mark this key as inactive and try again with a different key
+        const keys = await fetchElevenLabsApiKeys(userId);
+        const currentKey = keys.find(k => k.key === apiKey);
+        
+        if (currentKey) {
+          await updateElevenLabsApiKey(currentKey.id!, {
+            is_active: false,
+            quota_remaining: 0
+          });
+        }
+        
+        // Retry with a different key
+        return generateAvatarVideo(audioBlob, voiceId, userId);
+      }
+      
+      throw new Error(`ElevenLabs conversion API error: ${conversionResponse.status} ${errorText}`);
     }
     
-    const statusData = await statusResponse.json();
+    const conversionData = await conversionResponse.json();
+    const conversionId = conversionData.conversion_id;
     
-    if (statusData.status === "completed") {
-      videoUrl = statusData.output_url;
-      break;
-    } else if (statusData.status === "failed") {
-      throw new Error(`ElevenLabs conversion failed: ${statusData.error || "Unknown error"}`);
+    // 2. Upload audio
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'audio.mp3');
+    
+    const uploadResponse = await fetch(`https://api.elevenlabs.io/v1/speech-to-speech/convert/${conversionId}/audio`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey
+      },
+      body: formData
+    });
+    
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      throw new Error(`ElevenLabs upload API error: ${uploadResponse.status} ${errorText}`);
     }
+    
+    // 3. Start conversion
+    const startResponse = await fetch(`https://api.elevenlabs.io/v1/speech-to-speech/convert/${conversionId}/start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey
+      },
+      body: JSON.stringify({})
+    });
+    
+    if (!startResponse.ok) {
+      const errorText = await startResponse.text();
+      throw new Error(`ElevenLabs start conversion API error: ${startResponse.status} ${errorText}`);
+    }
+    
+    // 4. Poll for completion
+    let videoUrl = "";
+    let maxAttempts = 30; // 5 minutes (30 * 10s)
+    
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+      
+      const statusResponse = await fetch(`https://api.elevenlabs.io/v1/speech-to-speech/convert/${conversionId}`, {
+        method: 'GET',
+        headers: {
+          'xi-api-key': apiKey
+        }
+      });
+      
+      if (!statusResponse.ok) {
+        continue;
+      }
+      
+      const statusData = await statusResponse.json();
+      
+      if (statusData.status === "completed") {
+        videoUrl = statusData.output_url;
+        break;
+      } else if (statusData.status === "failed") {
+        throw new Error(`ElevenLabs conversion failed: ${statusData.error || "Unknown error"}`);
+      }
+    }
+    
+    if (!videoUrl) {
+      throw new Error("ElevenLabs conversion timed out");
+    }
+    
+    // Update the key's usage stats after successful generation
+    try {
+      const keys = await fetchElevenLabsApiKeys(userId);
+      const usedKey = keys.find(k => k.key === apiKey);
+      
+      if (usedKey) {
+        const { subscription } = await validateElevenLabsApiKey(apiKey);
+        const quotaRemaining = subscription.character_limit - subscription.character_count;
+        
+        await updateElevenLabsApiKey(usedKey.id!, {
+          quota_remaining: quotaRemaining,
+          last_used: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('Error updating key usage stats:', error);
+      // Don't fail the video generation if this fails
+    }
+    
+    return videoUrl;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('All ElevenLabs API keys have reached their quota')) {
+      throw error; // Rethrow quota error
+    }
+    
+    console.error('Error generating avatar:', error);
+    throw new Error('Failed to generate avatar video. Please try again or check your API keys.');
   }
-  
-  if (!videoUrl) {
-    throw new Error("ElevenLabs conversion timed out");
-  }
-  
-  return videoUrl;
 };
 
 // Helper function to ensure status is one of the valid types

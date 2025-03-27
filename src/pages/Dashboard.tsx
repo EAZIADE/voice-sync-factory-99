@@ -8,6 +8,7 @@ import { Project } from "@/types";
 import { fetchUserProjects } from "@/services/api";
 import Header from "@/components/Header";
 import { useToast } from "@/components/ui/use-toast";
+import ElevenLabsKeyManager from "@/components/ElevenLabsKeyManager";
 
 const Dashboard = () => {
   const { user, loading } = useAuth();
@@ -135,6 +136,10 @@ const Dashboard = () => {
               ))}
             </div>
           )}
+
+          <div className="mt-12">
+            <ElevenLabsKeyManager />
+          </div>
         </div>
       </main>
     </div>
