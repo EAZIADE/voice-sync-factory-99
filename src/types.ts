@@ -14,6 +14,7 @@ export interface Template {
   name: string;
   description: string;
   image_url: string;
+  category: string;
   is_premium: boolean;
   created_at?: string;
 }
@@ -37,7 +38,7 @@ export interface Project {
   selected_hosts: string[];
   selected_template: string;
   selected_language: string;
-  status: 'draft' | 'processing' | 'completed' | 'failed';
+  status: 'draft' | 'processing' | 'completed';
   result_url?: string | null;
   audio_url?: string | null;
   created_at?: string;

@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { GlassPanel, GlassCard } from "@/components/ui/GlassMorphism";
 import { AnimatedButton } from "@/components/ui/AnimatedButton";
 import { Project } from "@/types";
-import { fetchUserProjects } from "@/services/api";
+import { fetchProjects } from "@/services/api";
 import Header from "@/components/Header";
 import { useToast } from "@/components/ui/use-toast";
 import ElevenLabsKeyManager from "@/components/ElevenLabsKeyManager";
@@ -22,7 +22,7 @@ const Dashboard = () => {
       
       try {
         setIsLoading(true);
-        const data = await fetchUserProjects(user.id);
+        const data = await fetchProjects(user.id);
         setProjects(data);
       } catch (error) {
         console.error("Error loading projects:", error);
