@@ -2,7 +2,7 @@
 import { Database as SupabaseDatabase } from './types';
 
 // Define a merged type that extends the original Database type
-type ExtendedDatabase = {
+export interface ExtendedDatabase {
   public: {
     Tables: {
       elevenlabs_api_keys: {
@@ -54,7 +54,7 @@ type ExtendedDatabase = {
     Enums: SupabaseDatabase['public']['Enums'];
     CompositeTypes: SupabaseDatabase['public']['CompositeTypes'];
   };
-};
+}
 
 // Export the extended Database type
 export type Database = ExtendedDatabase;

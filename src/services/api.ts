@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { Host, Template, Language, Project, ElevenLabsApiKey } from "@/types";
 import { Database } from "@/integrations/supabase/type-extensions";
@@ -112,13 +111,13 @@ export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabs
       .rpc('get_elevenlabs_api_keys', { user_id_param: userId });
     
     if (!rpcError && rpcData) {
-      return rpcData as unknown as ElevenLabsApiKey[];
+      return rpcData as ElevenLabsApiKey[];
     }
     
     // Fallback to direct query if RPC fails or is unavailable
     console.log("RPC failed or unavailable, falling back to direct query");
     const { data, error } = await supabase
-      .from('elevenlabs_api_keys' as keyof Database['public']['Tables'])
+      .from('elevenlabs_api_keys')
       .select('*')
       .eq('user_id', userId)
       .order('is_active', { ascending: false })
@@ -129,7 +128,7 @@ export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabs
       throw error;
     }
     
-    return data as unknown as ElevenLabsApiKey[];
+    return data as ElevenLabsApiKey[];
   } catch (error) {
     console.error('Error in fetchElevenLabsApiKeys:', error);
     return [];
@@ -144,8 +143,8 @@ export const addElevenLabsApiKey = async (keyData: Omit<ElevenLabsApiKey, 'id' |
   }
   
   const { data, error } = await supabase
-    .from('elevenlabs_api_keys' as keyof Database['public']['Tables'])
-    .insert([keyData as any])
+    .from('elevenlabs_api_keys')
+    .insert([keyData])
     .select('*')
     .single();
   
@@ -154,13 +153,13 @@ export const addElevenLabsApiKey = async (keyData: Omit<ElevenLabsApiKey, 'id' |
     throw error;
   }
   
-  return data as unknown as ElevenLabsApiKey;
+  return data as ElevenLabsApiKey;
 };
 
 export const updateElevenLabsApiKey = async (id: string, updates: Partial<ElevenLabsApiKey>): Promise<ElevenLabsApiKey> => {
   const { data, error } = await supabase
-    .from('elevenlabs_api_keys' as keyof Database['public']['Tables'])
-    .update(updates as any)
+    .from('elevenlabs_api_keys')
+    .update(updates)
     .eq('id', id)
     .select('*')
     .single();
@@ -170,12 +169,12 @@ export const updateElevenLabsApiKey = async (id: string, updates: Partial<Eleven
     throw error;
   }
   
-  return data as unknown as ElevenLabsApiKey;
+  return data as ElevenLabsApiKey;
 };
 
 export const deleteElevenLabsApiKey = async (id: string): Promise<void> => {
   const { error } = await supabase
-    .from('elevenlabs_api_keys' as keyof Database['public']['Tables'])
+    .from('elevenlabs_api_keys')
     .delete()
     .eq('id', id);
   
