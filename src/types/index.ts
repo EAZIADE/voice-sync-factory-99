@@ -41,3 +41,14 @@ export interface Project {
   created_at?: string;
   updated_at?: string;
 }
+
+export interface ElevenLabsApiKey {
+  id?: string;
+  key: string;
+  name: string;
+  is_active: boolean;
+  quota_remaining?: number;
+  last_used?: string;
+  created_at?: string;
+  user_id: string;
+}

@@ -1,6 +1,6 @@
 
 import { supabase } from "@/integrations/supabase/client";
-import { Host, Template, Language, Project } from "@/types";
+import { Host, Template, Language, Project, ElevenLabsApiKey } from "@/types";
 
 // Host related API calls
 export const fetchHosts = async (): Promise<Host[]> => {
@@ -105,28 +105,27 @@ export const updateProject = async (id: string, updates: Partial<Project>): Prom
 };
 
 // ElevenLabs API Key Management
-export interface ElevenLabsApiKey {
-  id?: string;
-  key: string;
-  name: string;
-  is_active: boolean;
-  quota_remaining?: number;
-  last_used?: string;
-  created_at?: string;
-  user_id?: string;
-}
-
 export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabsApiKey[]> => {
   const { data, error } = await supabase
-    .from('elevenlabs_api_keys')
-    .select('*')
-    .eq('user_id', userId)
-    .order('is_active', { ascending: false })
-    .order('created_at', { ascending: false });
+    .rpc('get_elevenlabs_api_keys', { user_id_param: userId })
+    .select('*');
   
   if (error) {
     console.error('Error fetching ElevenLabs API keys:', error);
-    throw error;
+    // If RPC fails, fallback to raw SQL
+    const { data: rawData, error: rawError } = await supabase
+      .from('elevenlabs_api_keys')
+      .select('*')
+      .eq('user_id', userId)
+      .order('is_active', { ascending: false })
+      .order('created_at', { ascending: false });
+    
+    if (rawError) {
+      console.error('Error fetching ElevenLabs API keys (fallback):', rawError);
+      throw rawError;
+    }
+    
+    return rawData || [];
   }
   
   return data || [];
@@ -140,10 +139,11 @@ export const addElevenLabsApiKey = async (keyData: Omit<ElevenLabsApiKey, 'id' |
     throw new Error('Invalid ElevenLabs API key. Please check and try again.');
   }
   
+  // Insert the key using raw SQL since it's not in the Supabase types
   const { data, error } = await supabase
     .from('elevenlabs_api_keys')
     .insert([keyData])
-    .select()
+    .select('*')
     .single();
   
   if (error) {
@@ -151,7 +151,7 @@ export const addElevenLabsApiKey = async (keyData: Omit<ElevenLabsApiKey, 'id' |
     throw error;
   }
   
-  return data;
+  return data as ElevenLabsApiKey;
 };
 
 export const updateElevenLabsApiKey = async (id: string, updates: Partial<ElevenLabsApiKey>): Promise<ElevenLabsApiKey> => {
@@ -159,7 +159,7 @@ export const updateElevenLabsApiKey = async (id: string, updates: Partial<Eleven
     .from('elevenlabs_api_keys')
     .update(updates)
     .eq('id', id)
-    .select()
+    .select('*')
     .single();
   
   if (error) {
@@ -167,7 +167,7 @@ export const updateElevenLabsApiKey = async (id: string, updates: Partial<Eleven
     throw error;
   }
   
-  return data;
+  return data as ElevenLabsApiKey;
 };
 
 export const deleteElevenLabsApiKey = async (id: string): Promise<void> => {

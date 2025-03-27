@@ -9,7 +9,7 @@ import {
   deleteElevenLabsApiKey,
   validateElevenLabsApiKey
 } from "@/services/api";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { GlassPanel } from "@/components/ui/GlassMorphism";
 import { AnimatedButton } from "@/components/ui/AnimatedButton";
 import { Input } from "@/components/ui/input";
@@ -382,7 +382,7 @@ const ElevenLabsKeyManager = () => {
                         
                         <AnimatedButton 
                           onClick={() => handleToggleActivation(key)} 
-                          variant={key.is_active ? "destructive" : "outline"} 
+                          variant={key.is_active ? "outline" : "outline"} 
                           size="sm"
                         >
                           {key.is_active ? (
@@ -394,7 +394,7 @@ const ElevenLabsKeyManager = () => {
                         
                         <AnimatedButton 
                           onClick={() => handleDelete(key.id!)} 
-                          variant="destructive" 
+                          variant="default" 
                           size="sm"
                         >
                           <Trash2 className="h-4 w-4" />
