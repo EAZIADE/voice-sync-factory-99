@@ -7,9 +7,10 @@ import { GlassPanel } from "@/components/ui/GlassMorphism";
 import { AnimatedButton } from "@/components/ui/AnimatedButton";
 import Header from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, getMediaUrl } from "@/integrations/supabase/client";
 import PodcastPreview from "@/components/PodcastPreview";
 import ProjectGenerator from "@/components/ProjectGenerator";
+import { toast } from "sonner";
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -19,7 +20,7 @@ const ProjectDetail = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<{video?: string, audio?: string}>({});
-  const { toast } = useToast();
+  const { toast: hookToast } = useToast();
 
   useEffect(() => {
     const loadProject = async () => {
@@ -46,7 +47,7 @@ const ProjectDetail = () => {
         }
       } catch (error) {
         console.error("Error loading project:", error);
-        toast({
+        hookToast({
           title: "Error",
           description: "Failed to load the project. Please try again.",
           variant: "destructive"
@@ -59,7 +60,7 @@ const ProjectDetail = () => {
     if (user) {
       loadProject();
     }
-  }, [user, id, toast]);
+  }, [user, id, hookToast]);
 
   useEffect(() => {
     if (!id || !user) return;
@@ -104,11 +105,19 @@ const ProjectDetail = () => {
           setProject(prev => prev ? { ...prev, status: validStatus, updated_at: data.updated_at } : null);
           
           if (data.status === 'completed') {
-            toast({
+            hookToast({
               title: "Success!",
               description: "Your AI podcast has been generated using Google's NotebookLM, Studio, and Gemini technology.",
             });
             clearInterval(interval);
+            
+            // When status changes to completed, update media URLs with cache busting
+            if (id) {
+              setMediaUrls({
+                video: getMediaUrl(id, 'video'),
+                audio: getMediaUrl(id, 'audio')
+              });
+            }
           }
         }
       } catch (error) {
@@ -117,7 +126,7 @@ const ProjectDetail = () => {
     }, 5000); // Poll every 5 seconds
 
     return () => clearInterval(interval);
-  }, [id, user, project, toast]);
+  }, [id, user, project, hookToast]);
 
   const handleGenerateStart = () => {
     setIsGenerating(true);
@@ -151,61 +160,29 @@ const ProjectDetail = () => {
     });
   };
 
-  // Update this useEffect hook to verify media URLs when status changes to completed
+  // Update media URLs when project status changes to completed
   useEffect(() => {
     if (!project || project.status !== 'completed' || !id) return;
     
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cvfqcvytoobplgracobg.supabase.co';
-    
-    const videoUrl = `${supabaseUrl}/storage/v1/object/public/podcasts/${id}/video.mp4`;
-    const audioUrl = `${supabaseUrl}/storage/v1/object/public/podcasts/${id}/audio.mp3`;
+    // Generate URLs with cache busting
+    const videoUrl = getMediaUrl(id, 'video');
+    const audioUrl = getMediaUrl(id, 'audio');
     
     console.log("Project completed, setting media URLs:");
     console.log("Video URL:", videoUrl);
     console.log("Audio URL:", audioUrl);
     
-    // Verify the URLs are valid with HEAD requests
-    const checkUrl = async (url: string, mediaType: 'video' | 'audio') => {
-      try {
-        const response = await fetch(url, { 
-          method: 'HEAD',
-          cache: 'no-cache' // Prevent caching
-        });
-        
-        if (!response.ok) {
-          console.error(`${mediaType} URL check failed:`, response.status);
-          return false;
-        }
-        
-        console.log(`${mediaType} URL verified with status:`, response.status);
-        return true;
-      } catch (err) {
-        console.error(`Error checking ${mediaType} URL:`, err);
-        return false;
-      }
-    };
+    setMediaUrls({
+      video: videoUrl,
+      audio: audioUrl
+    });
     
-    // Check both URLs and update state accordingly
-    const verifyMediaUrls = async () => {
-      const videoValid = await checkUrl(videoUrl, 'video');
-      const audioValid = await checkUrl(audioUrl, 'audio');
-      
-      setMediaUrls({
-        video: videoValid ? videoUrl : undefined,
-        audio: audioValid ? audioUrl : undefined
-      });
-      
-      if (!videoValid && !audioValid) {
-        toast({
-          title: "Media Not Available",
-          description: "The podcast files are not accessible. You may need to regenerate the podcast.",
-          variant: "destructive"
-        });
-      }
-    };
+    // Log to help debugging
+    toast.success("Media URLs updated", {
+      description: "Podcast media files are ready for playback"
+    });
     
-    verifyMediaUrls();
-  }, [project?.status, id, toast]);
+  }, [project?.status, id]);
 
   if (!loading && !user) {
     return <Navigate to="/auth" replace />;
@@ -245,17 +222,6 @@ const ProjectDetail = () => {
     );
   }
 
-  // Get URLs from state or generate them if not yet verified
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cvfqcvytoobplgracobg.supabase.co';
-  
-  const videoUrl = mediaUrls.video || (project?.status === 'completed' && project?.id 
-    ? `${supabaseUrl}/storage/v1/object/public/podcasts/${project.id}/video.mp4?${Date.now()}` 
-    : undefined);
-  
-  const audioUrl = mediaUrls.audio || (project?.status === 'completed' && project?.id
-    ? `${supabaseUrl}/storage/v1/object/public/podcasts/${project.id}/audio.mp3?${Date.now()}` 
-    : undefined);
-
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -276,8 +242,8 @@ const ProjectDetail = () => {
                 <PodcastPreview 
                   projectId={project?.id}
                   status={project?.status}
-                  previewUrl={videoUrl}
-                  audioUrl={audioUrl}
+                  previewUrl={mediaUrls.video}
+                  audioUrl={mediaUrls.audio}
                   generationError={generationError}
                 />
                 

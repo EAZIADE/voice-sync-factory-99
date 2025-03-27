@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
+
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { GlassCard, GlassPanel } from "./ui/GlassMorphism";
 import { AnimatedButton } from "./ui/AnimatedButton";
 import CharacterControls, { CharacterControlState } from "./CharacterControls";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { toast } from "sonner";
 
 interface PodcastPreviewProps {
   projectId?: string;
@@ -28,6 +30,7 @@ const PodcastPreview = ({
   const [videoError, setVideoError] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<'video' | 'audio'>('video');
+  const [loadAttempts, setLoadAttempts] = useState(0);
   const [characterControls, setCharacterControls] = useState<CharacterControlState>({
     expressiveness: 70,
     gestureIntensity: 50,
@@ -35,7 +38,7 @@ const PodcastPreview = ({
     autoGestures: true,
     eyeContact: true,
   });
-  const { toast } = useToast();
+  const { toast: hookToast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   
@@ -50,36 +53,57 @@ const PodcastPreview = ({
     ? audioUrl
     : demoAudioUrl;
   
-  const validateMediaUrl = async (url: string, mediaType: 'video' | 'audio'): Promise<boolean> => {
-    try {
-      console.log(`Validating ${mediaType} URL: ${url}`);
-      
-      if (!url || !url.startsWith('http')) {
-        console.error(`Invalid ${mediaType} URL format:`, url);
-        if (mediaType === 'video') {
-          setVideoError(`Invalid video URL format. Using demo content instead.`);
-        } else {
-          setAudioError(`Invalid audio URL format. Using demo content instead.`);
-        }
-        return false;
+  // Reset error states when URLs change
+  useEffect(() => {
+    setVideoError(null);
+    setAudioError(null);
+    setLoadAttempts(0);
+    
+    if (status === 'completed') {
+      console.log('Media sources updated:', { video: previewUrl, audio: audioUrl });
+    }
+  }, [previewUrl, audioUrl, status]);
+
+  // Function to validate media URL
+  const validateMediaUrl = useCallback(async (url: string, mediaType: 'video' | 'audio'): Promise<boolean> => {
+    if (!url || !url.startsWith('http')) {
+      console.error(`Invalid ${mediaType} URL format:`, url);
+      if (mediaType === 'video') {
+        setVideoError(`Invalid video URL format`);
+      } else {
+        setAudioError(`Invalid audio URL format`);
       }
+      return false;
+    }
+    
+    try {
+      console.log(`Validating ${mediaType} URL:`, url);
       
       const urlWithCacheBuster = new URL(url);
-      urlWithCacheBuster.searchParams.append('t', Date.now().toString());
+      const timestamp = Date.now().toString();
+      
+      // Clear any existing query parameters and add cache busting
+      Array.from(urlWithCacheBuster.searchParams.keys()).forEach(key => {
+        urlWithCacheBuster.searchParams.delete(key);
+      });
+      
+      urlWithCacheBuster.searchParams.append('t', timestamp);
       
       const response = await fetch(urlWithCacheBuster.toString(), { 
         method: 'HEAD',
         mode: 'cors',
         cache: 'no-cache',
-        credentials: 'omit'
+        credentials: 'same-origin'
       });
       
+      console.log(`${mediaType} URL validation response:`, response.status, response.ok);
+      
       if (!response.ok) {
-        console.error(`${mediaType} URL returned error:`, response.status, response.statusText);
+        console.error(`${mediaType} URL returned error:`, response.status);
         if (mediaType === 'video') {
-          setVideoError(`Video not available (${response.status}). Using demo content instead.`);
+          setVideoError(`Video file not available (${response.status})`);
         } else {
-          setAudioError(`Audio not available (${response.status}). Using demo content instead.`);
+          setAudioError(`Audio file not available (${response.status})`);
         }
         return false;
       }
@@ -87,19 +111,24 @@ const PodcastPreview = ({
       const contentType = response.headers.get('content-type');
       console.log(`${mediaType} content type:`, contentType);
       
-      if (mediaType === 'video' && contentType && 
-          !contentType.includes('video/') && 
-          !contentType.includes('application/octet-stream')) {
-        console.error('Invalid video content type:', contentType);
-        setVideoError(`Invalid video format (${contentType}). Using demo content instead.`);
-        return false;
+      let isValidContentType = false;
+      
+      if (mediaType === 'video') {
+        isValidContentType = !!contentType && (
+          contentType.includes('video/') || 
+          contentType.includes('application/octet-stream') ||
+          contentType.includes('binary/')
+        );
+      } else {
+        isValidContentType = !!contentType && (
+          contentType.includes('audio/') || 
+          contentType.includes('application/octet-stream') ||
+          contentType.includes('binary/')
+        );
       }
       
-      if (mediaType === 'audio' && contentType && 
-          !contentType.includes('audio/') && 
-          !contentType.includes('application/octet-stream')) {
-        console.error('Invalid audio content type:', contentType);
-        setAudioError(`Invalid audio format (${contentType}). Using demo content instead.`);
+      if (!isValidContentType) {
+        console.warn(`Invalid ${mediaType} content type:`, contentType);
         return false;
       }
       
@@ -108,97 +137,108 @@ const PodcastPreview = ({
     } catch (err) {
       console.error(`Error checking ${mediaType} URL:`, err);
       if (mediaType === 'video') {
-        setVideoError(`Error accessing video source. Using demo content instead.`);
+        setVideoError(`Error accessing video source`);
       } else {
-        setAudioError(`Error accessing audio source. Using demo content instead.`);
+        setAudioError(`Error accessing audio source`);
       }
       return false;
     }
-  };
-  
+  }, []);
+
+  // Load media when sources change
   useEffect(() => {
-    setVideoError(null);
-    setAudioError(null);
-    
-    console.log("Media source updates - Video:", videoSource, "Audio:", audioSource);
-    
-    if (status === 'completed') {
-      if (previewUrl) {
-        if (!previewUrl.startsWith('http')) {
-          console.error("Invalid video URL:", previewUrl);
-          setVideoError("Invalid video URL format. Using demo content instead.");
-        } else {
-          validateMediaUrl(previewUrl, 'video')
-            .then(valid => {
-              if (!valid && audioUrl && audioUrl.startsWith('http')) {
-                setMediaType('audio');
-              }
-            });
+    if (status !== 'completed' || loadAttempts > 5) return;
+
+    const loadMedia = async () => {
+      console.log("Attempting to load media:", loadAttempts);
+      
+      if (videoSource !== demoVideoUrl) {
+        const videoValid = await validateMediaUrl(videoSource, 'video');
+        if (!videoValid) {
+          setMediaType('audio');
+        } else if (videoRef.current) {
+          videoRef.current.src = videoSource;
+          videoRef.current.load();
         }
-      } else if (audioUrl) {
-        setMediaType('audio');
       }
       
-      if (audioUrl && audioUrl.startsWith('http')) {
-        validateMediaUrl(audioUrl, 'audio');
+      if (audioSource !== demoAudioUrl) {
+        const audioValid = await validateMediaUrl(audioSource, 'audio');
+        if (!audioValid && audioRef.current) {
+          audioRef.current.src = demoAudioUrl;
+          audioRef.current.load();
+        } else if (audioRef.current) {
+          audioRef.current.src = audioSource;
+          audioRef.current.load();
+        }
       }
-    }
-  }, [status, previewUrl, audioUrl]);
-  
+      
+      setLoadAttempts(prev => prev + 1);
+    };
+    
+    const timeoutId = setTimeout(loadMedia, 2000 * Math.min(loadAttempts + 1, 5));
+    
+    return () => clearTimeout(timeoutId);
+  }, [status, videoSource, audioSource, loadAttempts, validateMediaUrl, demoVideoUrl, demoAudioUrl]);
+
+  // Handle playback
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
     if (isPlaying) {
-      if (mediaType === 'video' && videoRef.current) {
-        console.log("Attempting to play video:", videoRef.current.src);
-        videoRef.current.play().catch(err => {
-          console.error("Error playing video:", err);
-          setVideoError(`Error playing video: ${err.message}. Using demo content instead.`);
-          
-          if (videoSource !== demoVideoUrl) {
-            if (videoRef.current) {
-              console.log("Trying demo video instead:", demoVideoUrl);
-              videoRef.current.src = demoVideoUrl;
-              videoRef.current.load();
-              videoRef.current.play().catch(demoErr => {
-                console.error("Error playing demo video:", demoErr);
-                
-                if (videoSource !== demoVideoUrl) {
+      const playMedia = async () => {
+        if (mediaType === 'video' && videoRef.current) {
+          try {
+            await videoRef.current.play();
+          } catch (err) {
+            console.error("Error playing video:", err);
+            setVideoError(`Error playing video: ${err.message}`);
+            
+            if (videoSource !== demoVideoUrl) {
+              if (videoRef.current) {
+                console.log("Trying demo video instead");
+                videoRef.current.src = demoVideoUrl;
+                videoRef.current.load();
+                try {
+                  await videoRef.current.play();
+                } catch (demoErr) {
+                  console.error("Error playing demo video:", demoErr);
                   setMediaType('audio');
                 }
-              });
+              }
+            } else {
+              setMediaType('audio');
             }
-          } else {
-            setMediaType('audio');
           }
-        });
-      } else if (mediaType === 'audio' && audioRef.current) {
-        console.log("Attempting to play audio:", audioRef.current.src);
-        audioRef.current.play().catch(err => {
-          console.error("Error playing audio:", err);
-          setAudioError(`Error playing audio: ${err.message}. Using demo content instead.`);
-          
-          if (audioSource !== demoAudioUrl) {
-            if (audioRef.current) {
-              console.log("Trying demo audio instead:", demoAudioUrl);
-              audioRef.current.src = demoAudioUrl;
-              audioRef.current.load();
-              audioRef.current.play().catch(demoErr => {
-                console.error("Error playing demo audio:", demoErr);
-                setIsPlaying(false);
-              });
+        } else if (mediaType === 'audio' && audioRef.current) {
+          try {
+            await audioRef.current.play();
+          } catch (err) {
+            console.error("Error playing audio:", err);
+            setAudioError(`Error playing audio: ${err.message}`);
+            
+            if (audioSource !== demoAudioUrl) {
+              if (audioRef.current) {
+                console.log("Trying demo audio instead");
+                audioRef.current.src = demoAudioUrl;
+                audioRef.current.load();
+                try {
+                  await audioRef.current.play();
+                } catch (demoErr) {
+                  console.error("Error playing demo audio:", demoErr);
+                  setIsPlaying(false);
+                  toast.error("Couldn't play any audio");
+                }
+              }
+            } else {
+              setIsPlaying(false);
+              toast.error("Audio playback error");
             }
-          } else {
-            setIsPlaying(false);
           }
-          
-          toast({
-            title: "Audio Playback Error",
-            description: `Format error. Trying fallback audio.`,
-            variant: "destructive"
-          });
-        });
-      }
+        }
+      };
+      
+      playMedia();
       
       interval = setInterval(() => {
         const mediaElement = mediaType === 'video' ? videoRef.current : audioRef.current;
@@ -229,70 +269,62 @@ const PodcastPreview = ({
       }
     }
     
-    return () => clearInterval(interval);
-  }, [isPlaying, duration, mediaType, videoSource, audioSource, toast, demoVideoUrl, demoAudioUrl]);
-  
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isPlaying, mediaType, videoSource, audioSource, demoVideoUrl, demoAudioUrl, duration]);
+
+  // Handle media events
   useEffect(() => {
-    const handleLoadedMetadata = () => {
-      const mediaElement = mediaType === 'video' ? videoRef.current : audioRef.current;
-      if (mediaElement && !isNaN(mediaElement.duration)) {
-        setDuration(mediaElement.duration);
+    const handleLoadedMetadata = (e: Event) => {
+      const target = e.target as HTMLMediaElement;
+      if (target && !isNaN(target.duration)) {
+        setDuration(target.duration);
+        console.log(`${mediaType} metadata loaded, duration:`, target.duration);
       }
     };
     
     const handleError = (e: Event) => {
       const target = e.target as HTMLMediaElement;
-      console.error(`${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} element error:`, target.error);
+      console.error(`${mediaType} element error:`, target.error);
+      
+      const errorMessage = target.error?.message || 'unknown error';
+      const errorCode = target.error?.code || 0;
       
       if (mediaType === 'video') {
-        const errorMessage = target.error?.message || 'unknown error';
-        const errorCode = target.error?.code || 0;
-        setVideoError(`Video playback error - ${errorMessage} (code: ${errorCode}). Using demo content instead.`);
+        setVideoError(`Video error (${errorCode}): ${errorMessage}`);
         
         if (videoSource !== demoVideoUrl && videoRef.current) {
+          console.log("Switching to demo video");
           videoRef.current.src = demoVideoUrl;
           videoRef.current.load();
-          
-          setTimeout(() => {
-            if (videoRef.current && isPlaying) {
-              videoRef.current.play().catch(demoErr => {
-                console.error("Error playing demo video:", demoErr);
-                setMediaType('audio');
-              });
-            }
-          }, 500);
         } else {
           setMediaType('audio');
         }
       } else {
-        const errorMessage = target.error?.message || 'unknown error';
-        const errorCode = target.error?.code || 0;
-        setAudioError(`Audio playback error - ${errorMessage} (code: ${errorCode}). Using demo content instead.`);
+        setAudioError(`Audio error (${errorCode}): ${errorMessage}`);
         
         if (audioSource !== demoAudioUrl && audioRef.current) {
+          console.log("Switching to demo audio");
           audioRef.current.src = demoAudioUrl;
           audioRef.current.load();
-          
-          setTimeout(() => {
-            if (audioRef.current && isPlaying) {
-              audioRef.current.play().catch(demoErr => {
-                console.error("Error playing demo audio:", demoErr);
-                setIsPlaying(false);
-              });
-            }
-          }, 500);
-        } else {
-          setIsPlaying(false);
         }
-        
-        toast({
-          title: "Audio Playback Error",
-          description: `Format error. Trying fallback audio.`,
-          variant: "destructive"
-        });
       }
       
       setIsPlaying(false);
+      
+      toast.error(`${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} Playback Error`, {
+        description: "Format error. Trying fallback media."
+      });
+    };
+    
+    const handleCanPlay = () => {
+      console.log(`${mediaType} can play`);
+      if (mediaType === 'video') {
+        setVideoError(null);
+      } else {
+        setAudioError(null);
+      }
     };
     
     const videoElement = videoRef.current;
@@ -301,32 +333,30 @@ const PodcastPreview = ({
     if (videoElement) {
       videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
       videoElement.addEventListener('error', handleError);
+      videoElement.addEventListener('canplay', handleCanPlay);
     }
     
     if (audioElement) {
       audioElement.addEventListener('loadedmetadata', handleLoadedMetadata);
       audioElement.addEventListener('error', handleError);
-      
-      audioElement.addEventListener('canplaythrough', () => {
-        setAudioError(null);
-        console.log("Audio can be played through without buffering");
-      });
+      audioElement.addEventListener('canplay', handleCanPlay);
     }
     
     return () => {
       if (videoElement) {
         videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
         videoElement.removeEventListener('error', handleError);
+        videoElement.removeEventListener('canplay', handleCanPlay);
       }
       
       if (audioElement) {
         audioElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
         audioElement.removeEventListener('error', handleError);
-        audioElement.removeEventListener('canplaythrough', () => {});
+        audioElement.removeEventListener('canplay', handleCanPlay);
       }
     };
-  }, [mediaType, toast, audioSource, videoSource, demoAudioUrl, demoVideoUrl]);
-  
+  }, [mediaType, videoSource, audioSource, demoVideoUrl, demoAudioUrl]);
+
   const togglePlayback = () => {
     setIsPlaying(!isPlaying);
   };
@@ -359,7 +389,7 @@ const PodcastPreview = ({
   
   const handleDownload = () => {
     if (status !== 'completed') {
-      toast({
+      hookToast({
         title: "Podcast not ready",
         description: "Please generate the podcast first before downloading.",
         variant: "destructive"
@@ -372,11 +402,11 @@ const PodcastPreview = ({
       : (audioError ? demoAudioUrl : audioSource);
     const fileType = mediaType === 'video' ? 'video.mp4' : 'audio.mp3';
     
-    toast({
-      title: "Download started",
+    toast.success("Download started", {
       description: `Your podcast ${mediaType} is being prepared for download.`
     });
     
+    // Create a temporary anchor element to trigger the download
     const a = document.createElement('a');
     a.href = downloadUrl;
     a.download = `podcast-${projectId || 'demo'}-${fileType}`;
@@ -385,9 +415,8 @@ const PodcastPreview = ({
     a.click();
     document.body.removeChild(a);
     
-    toast({
-      title: "Download initiated",
-      description: `If the download doesn't start automatically, right-click on the media player and select 'Save video/audio as'.`
+    toast.info("Download initiated", {
+      description: `If download doesn't start automatically, right-click on the media player and select 'Save as'.`
     });
   };
   
@@ -396,8 +425,6 @@ const PodcastPreview = ({
     setIsPlaying(false);
   };
   
-  console.log(`Current ${mediaType} source:`, mediaType === 'video' ? videoSource : audioSource);
-
   return (
     <div className="space-y-6">
       <Tabs defaultValue="preview">

@@ -173,23 +173,35 @@ serve(async (req: Request) => {
       );
     }
     
-    // Create a storage bucket for podcasts if it doesn't exist
+    // Create a podcasts bucket if it doesn't exist and ensure it's public
     try {
+      console.log("Checking if podcasts bucket exists");
       const { data: bucketData, error: bucketError } = await supabaseClient
         .storage
         .getBucket('podcasts');
       
       if (bucketError && bucketError.message.includes('not found')) {
+        console.log("Creating podcasts bucket");
         await supabaseClient
           .storage
           .createBucket('podcasts', {
+            public: true, // Make sure the bucket is public
+            fileSizeLimit: 512000000, // 512MB
+          });
+        console.log("Created 'podcasts' bucket with public access");
+      } else if (!bucketError && bucketData) {
+        // Make sure the bucket is public
+        console.log("Updating podcasts bucket to ensure public access");
+        await supabaseClient
+          .storage
+          .updateBucket('podcasts', {
             public: true,
             fileSizeLimit: 512000000, // 512MB
           });
-        console.log("Created 'podcasts' bucket");
+        console.log("Updated 'podcasts' bucket to have public access");
       }
     } catch (error) {
-      console.error("Error ensuring bucket exists:", error);
+      console.error("Error ensuring bucket exists and is public:", error);
     }
     
     // Start the podcast generation in the background
@@ -280,6 +292,7 @@ serve(async (req: Request) => {
             
             // Get the audio as a blob
             audioBlob = await ttsResponse.blob();
+            console.log("Successfully generated audio with size:", audioBlob.size);
             
             // Update key usage stats
             try {
@@ -325,6 +338,18 @@ serve(async (req: Request) => {
         
         // Upload audio to Supabase storage with explicit content type
         console.log(`Attempting to upload audio file to podcasts/${projectId}/audio.mp3`);
+        
+        // First, delete existing file if it exists (to avoid conflicts)
+        try {
+          console.log("Removing existing audio file if any");
+          await supabaseClient
+            .storage
+            .from('podcasts')
+            .remove([`${projectId}/audio.mp3`]);
+        } catch (error) {
+          console.log("No existing audio file to remove or error removing:", error);
+        }
+        
         const { error: audioUploadError, data: audioUploadData } = await supabaseClient
           .storage
           .from('podcasts')
@@ -340,6 +365,14 @@ serve(async (req: Request) => {
         }
         
         console.log("Successfully generated and uploaded audio:", audioUploadData);
+        
+        // Make audio file public
+        const { data: audioPublicUrlData, error: audioPublicUrlError } = await supabaseClient
+          .storage
+          .from('podcasts')
+          .getPublicUrl(`${projectId}/audio.mp3`);
+        
+        console.log("Audio public URL:", audioPublicUrlData?.publicUrl);
         
         // Step 2: Generate avatar video using ElevenLabs API
         console.log("Starting ElevenLabs video generation");
@@ -521,6 +554,17 @@ serve(async (req: Request) => {
           throw new Error("Downloaded video from ElevenLabs is empty");
         }
         
+        // First, delete existing file if it exists (to avoid conflicts)
+        try {
+          console.log("Removing existing video file if any");
+          await supabaseClient
+            .storage
+            .from('podcasts')
+            .remove([`${projectId}/video.mp4`]);
+        } catch (error) {
+          console.log("No existing video file to remove or error removing:", error);
+        }
+        
         // Upload to Supabase storage with explicit content type
         console.log(`Attempting to upload video file to podcasts/${projectId}/video.mp4`);
         const { error: uploadError, data: uploadData } = await supabaseClient
@@ -539,7 +583,7 @@ serve(async (req: Request) => {
         
         console.log("Successfully uploaded video for project:", projectId, uploadData);
         
-        // Make the files publicly accessible and verify with better error logging
+        // Make the files publicly accessible
         const { data: videoPublicUrlData, error: videoPublicUrlError } = await supabaseClient
           .storage
           .from('podcasts')
@@ -551,27 +595,26 @@ serve(async (req: Request) => {
           console.log("Public URL for video:", videoPublicUrlData.publicUrl);
         }
         
-        const { data: audioPublicUrlData, error: audioPublicUrlError } = await supabaseClient
-          .storage
-          .from('podcasts')
-          .getPublicUrl(`${projectId}/audio.mp3`);
-        
+        // Ensure files are publicly accessible
         if (audioPublicUrlError) {
           console.error("Error getting public URL for audio:", audioPublicUrlError);
-        } else {
-          console.log("Public URL for audio:", audioPublicUrlData.publicUrl);
         }
         
-        // Verify the files exist and are accessible with improved logging
+        // Verify the files exist and are accessible
         try {
-          const videoCheckResponse = await fetch(videoPublicUrlData.publicUrl, { 
+          const videoUrlToCheck = videoPublicUrlData.publicUrl;
+          const audioUrlToCheck = audioPublicUrlData.publicUrl;
+          
+          console.log("Checking video URL:", videoUrlToCheck);
+          const videoCheckResponse = await fetch(videoUrlToCheck, { 
             method: 'HEAD',
             cache: 'no-store' 
           });
           console.log("Video file check:", videoCheckResponse.status, videoCheckResponse.ok, 
                      "Content-Type:", videoCheckResponse.headers.get('content-type'));
           
-          const audioCheckResponse = await fetch(audioPublicUrlData.publicUrl, { 
+          console.log("Checking audio URL:", audioUrlToCheck);
+          const audioCheckResponse = await fetch(audioUrlToCheck, { 
             method: 'HEAD',
             cache: 'no-store' 
           });

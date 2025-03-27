@@ -30,6 +30,25 @@ export const supabase = createClient<Database>(
       params: {
         eventsPerSecond: 10
       }
+    },
+    storage: {
+      // Disable retries to avoid request duplication
+      retryLimit: 0,
+      // Set cache control value for files
+      storageHeadersForGetPublicUrl: {
+        'cache-control': 'max-age=3600'
+      }
     }
   }
 );
+
+/**
+ * Helper function to get a media file URL with proper cache busting and content type
+ */
+export const getMediaUrl = (projectId: string, fileType: 'audio' | 'video'): string => {
+  const timestamp = Date.now();
+  const extension = fileType === 'audio' ? 'mp3' : 'mp4';
+  const contentType = fileType === 'audio' ? 'audio/mpeg' : 'video/mp4';
+  
+  return `${SUPABASE_URL}/storage/v1/object/public/podcasts/${projectId}/${fileType}.${extension}?t=${timestamp}&content-type=${encodeURIComponent(contentType)}`;
+};
