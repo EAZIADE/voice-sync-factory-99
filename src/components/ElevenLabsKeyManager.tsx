@@ -1,14 +1,13 @@
-
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { 
-  ElevenLabsApiKey, 
   fetchElevenLabsApiKeys, 
   addElevenLabsApiKey,
   updateElevenLabsApiKey,
   deleteElevenLabsApiKey,
   validateElevenLabsApiKey
 } from "@/services/api";
+import { ElevenLabsApiKey } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { GlassPanel } from "@/components/ui/GlassMorphism";
 import { AnimatedButton } from "@/components/ui/AnimatedButton";
@@ -85,10 +84,8 @@ const ElevenLabsKeyManager = () => {
         description: "Please wait while we validate your API key...",
       });
       
-      // Validate the key before adding it
       await validateElevenLabsApiKey(values.key);
       
-      // Add the key to the database
       await addElevenLabsApiKey({
         key: values.key,
         name: values.name,
@@ -101,13 +98,11 @@ const ElevenLabsKeyManager = () => {
         description: "API key added successfully!",
       });
       
-      // Reset the form
       form.reset({
         key: "",
         name: "My ElevenLabs Key"
       });
       
-      // Reload the keys
       await loadKeys();
     } catch (error) {
       console.error("Error adding API key:", error);
@@ -184,7 +179,6 @@ const ElevenLabsKeyManager = () => {
     if (!user || !editingKeyId) return;
     
     try {
-      // Validate the key if it was changed
       const currentKey = keys.find(k => k.id === editingKeyId);
       if (currentKey && currentKey.key !== values.key) {
         setValidating(true);

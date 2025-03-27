@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { addElevenLabsApiKey } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
+import { ElevenLabsApiKey } from '@/types';
 
 // This is a hidden component that will be rendered once to initialize the first API key
 const InitializeApiKey = () => {

@@ -1,6 +1,6 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { Host, Template, Language, Project, ElevenLabsApiKey } from "@/types";
+import './integrations/supabase/type-extensions';
 
 // Host related API calls
 export const fetchHosts = async (): Promise<Host[]> => {
@@ -41,7 +41,6 @@ export const fetchLanguages = async (): Promise<Language[]> => {
     throw error;
   }
   
-  // Add flag emoji and popularity status based on language code
   return (data || []).map(language => ({
     ...language,
     flag: getLanguageFlag(language.code),
@@ -106,43 +105,44 @@ export const updateProject = async (id: string, updates: Partial<Project>): Prom
 
 // ElevenLabs API Key Management
 export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabsApiKey[]> => {
-  const { data, error } = await supabase
-    .rpc('get_elevenlabs_api_keys', { user_id_param: userId })
-    .select('*');
-  
-  if (error) {
-    console.error('Error fetching ElevenLabs API keys:', error);
-    // If RPC fails, fallback to raw SQL
-    const { data: rawData, error: rawError } = await supabase
-      .from('elevenlabs_api_keys')
-      .select('*')
-      .eq('user_id', userId)
-      .order('is_active', { ascending: false })
-      .order('created_at', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .rpc('get_elevenlabs_api_keys', { user_id_param: userId });
     
-    if (rawError) {
-      console.error('Error fetching ElevenLabs API keys (fallback):', rawError);
-      throw rawError;
+    if (error) {
+      console.error('Error fetching ElevenLabs API keys with RPC:', error);
+      const { data: rawData, error: rawError } = await supabase
+        .from('elevenlabs_api_keys')
+        .select('*')
+        .eq('user_id', userId)
+        .order('is_active', { ascending: false })
+        .order('created_at', { ascending: false });
+      
+      if (rawError) {
+        console.error('Error fetching ElevenLabs API keys (fallback):', rawError);
+        throw rawError;
+      }
+      
+      return rawData as unknown as ElevenLabsApiKey[];
     }
     
-    return rawData || [];
+    return data as unknown as ElevenLabsApiKey[];
+  } catch (error) {
+    console.error('Error in fetchElevenLabsApiKeys:', error);
+    return [];
   }
-  
-  return data || [];
 };
 
 export const addElevenLabsApiKey = async (keyData: Omit<ElevenLabsApiKey, 'id' | 'created_at'>): Promise<ElevenLabsApiKey> => {
-  // Check if the key is valid by making a test request to ElevenLabs
   try {
     await validateElevenLabsApiKey(keyData.key);
   } catch (error) {
     throw new Error('Invalid ElevenLabs API key. Please check and try again.');
   }
   
-  // Insert the key using raw SQL since it's not in the Supabase types
   const { data, error } = await supabase
     .from('elevenlabs_api_keys')
-    .insert([keyData])
+    .insert([keyData as any])
     .select('*')
     .single();
   
@@ -151,13 +151,13 @@ export const addElevenLabsApiKey = async (keyData: Omit<ElevenLabsApiKey, 'id' |
     throw error;
   }
   
-  return data as ElevenLabsApiKey;
+  return data as unknown as ElevenLabsApiKey;
 };
 
 export const updateElevenLabsApiKey = async (id: string, updates: Partial<ElevenLabsApiKey>): Promise<ElevenLabsApiKey> => {
   const { data, error } = await supabase
     .from('elevenlabs_api_keys')
-    .update(updates)
+    .update(updates as any)
     .eq('id', id)
     .select('*')
     .single();
@@ -167,7 +167,7 @@ export const updateElevenLabsApiKey = async (id: string, updates: Partial<Eleven
     throw error;
   }
   
-  return data as ElevenLabsApiKey;
+  return data as unknown as ElevenLabsApiKey;
 };
 
 export const deleteElevenLabsApiKey = async (id: string): Promise<void> => {
@@ -183,7 +183,6 @@ export const deleteElevenLabsApiKey = async (id: string): Promise<void> => {
 };
 
 export const validateElevenLabsApiKey = async (apiKey: string): Promise<{valid: boolean, subscription: any}> => {
-  // Check if the key is valid by making a request to ElevenLabs
   const response = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
     method: 'GET',
     headers: {
@@ -199,7 +198,6 @@ export const validateElevenLabsApiKey = async (apiKey: string): Promise<{valid: 
   return { valid: true, subscription: data };
 };
 
-// Get a valid ElevenLabs API key with remaining quota
 export const getActiveElevenLabsApiKey = async (userId: string): Promise<string> => {
   const keys = await fetchElevenLabsApiKeys(userId);
   
@@ -207,11 +205,9 @@ export const getActiveElevenLabsApiKey = async (userId: string): Promise<string>
     throw new Error('No ElevenLabs API keys found. Please add a key in your dashboard.');
   }
   
-  // First try to use an active key with known quota
   const activeKeysWithQuota = keys.filter(k => k.is_active && (k.quota_remaining === undefined || k.quota_remaining > 0));
   
   if (activeKeysWithQuota.length > 0) {
-    // Use the key with highest quota or most recently added if quota is undefined
     const selectedKey = activeKeysWithQuota.sort((a, b) => {
       if (a.quota_remaining !== undefined && b.quota_remaining !== undefined) {
         return b.quota_remaining - a.quota_remaining;
@@ -219,7 +215,6 @@ export const getActiveElevenLabsApiKey = async (userId: string): Promise<string>
       return new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime();
     })[0];
     
-    // Update last_used timestamp
     await updateElevenLabsApiKey(selectedKey.id!, {
       last_used: new Date().toISOString()
     });
@@ -227,14 +222,12 @@ export const getActiveElevenLabsApiKey = async (userId: string): Promise<string>
     return selectedKey.key;
   }
   
-  // If no active keys with known quota, try to validate all inactive keys
   for (const key of keys.filter(k => !k.is_active)) {
     try {
       const { subscription } = await validateElevenLabsApiKey(key.key);
       const quotaRemaining = subscription.character_limit - subscription.character_count;
       
       if (quotaRemaining > 0) {
-        // Activate this key and update its quota
         await updateElevenLabsApiKey(key.id!, {
           is_active: true,
           quota_remaining: quotaRemaining,
@@ -244,14 +237,13 @@ export const getActiveElevenLabsApiKey = async (userId: string): Promise<string>
         return key.key;
       }
     } catch (error) {
-      continue; // Try the next key
+      continue;
     }
   }
   
   throw new Error('All ElevenLabs API keys have reached their quota. Please add a new key.');
 };
 
-// Functions related to ElevenLabs voices
 export interface ElevenLabsVoice {
   voice_id: string;
   name: string;
@@ -274,10 +266,9 @@ export interface ElevenLabsVoice {
   voice_type: string;
 }
 
-// Generate podcast audio with ElevenLabs
 export const generatePodcastAudio = async (
   text: string, 
-  voiceId: string = "21m00Tcm4TlvDq8ikWAM", // Default to Rachel
+  voiceId: string = "21m00Tcm4TlvDq8ikWAM",
   userId: string
 ): Promise<Blob> => {
   try {
@@ -302,9 +293,7 @@ export const generatePodcastAudio = async (
     if (!response.ok) {
       const errorText = await response.text();
       
-      // Check if this is a quota exceeded error
       if (response.status === 429 || errorText.includes('quota') || errorText.includes('limit')) {
-        // Mark this key as inactive and try again with a different key
         const keys = await fetchElevenLabsApiKeys(userId);
         const currentKey = keys.find(k => k.key === apiKey);
         
@@ -315,14 +304,12 @@ export const generatePodcastAudio = async (
           });
         }
         
-        // Retry with a different key
         return generatePodcastAudio(text, voiceId, userId);
       }
       
       throw new Error(`ElevenLabs API error: ${response.status} ${errorText}`);
     }
     
-    // Update the key's usage stats after successful generation
     try {
       const keys = await fetchElevenLabsApiKeys(userId);
       const usedKey = keys.find(k => k.key === apiKey);
@@ -338,13 +325,12 @@ export const generatePodcastAudio = async (
       }
     } catch (error) {
       console.error('Error updating key usage stats:', error);
-      // Don't fail the audio generation if this fails
     }
     
     return await response.blob();
   } catch (error) {
     if (error instanceof Error && error.message.includes('All ElevenLabs API keys have reached their quota')) {
-      throw error; // Rethrow quota error
+      throw error;
     }
     
     console.error('Error generating audio:', error);
@@ -352,7 +338,6 @@ export const generatePodcastAudio = async (
   }
 };
 
-// Generate avatar video with ElevenLabs
 export const generateAvatarVideo = async (
   audioBlob: Blob,
   voiceId: string = "21m00Tcm4TlvDq8ikWAM",
@@ -361,7 +346,6 @@ export const generateAvatarVideo = async (
   try {
     const apiKey = await getActiveElevenLabsApiKey(userId);
     
-    // 1. Create conversion
     const conversionResponse = await fetch("https://api.elevenlabs.io/v1/speech-to-speech/convert", {
       method: 'POST',
       headers: {
@@ -379,9 +363,7 @@ export const generateAvatarVideo = async (
     if (!conversionResponse.ok) {
       const errorText = await conversionResponse.text();
       
-      // Check if this is a quota exceeded error
       if (conversionResponse.status === 429 || errorText.includes('quota') || errorText.includes('limit')) {
-        // Mark this key as inactive and try again with a different key
         const keys = await fetchElevenLabsApiKeys(userId);
         const currentKey = keys.find(k => k.key === apiKey);
         
@@ -392,7 +374,6 @@ export const generateAvatarVideo = async (
           });
         }
         
-        // Retry with a different key
         return generateAvatarVideo(audioBlob, voiceId, userId);
       }
       
@@ -402,7 +383,6 @@ export const generateAvatarVideo = async (
     const conversionData = await conversionResponse.json();
     const conversionId = conversionData.conversion_id;
     
-    // 2. Upload audio
     const formData = new FormData();
     formData.append('audio', audioBlob, 'audio.mp3');
     
@@ -419,7 +399,6 @@ export const generateAvatarVideo = async (
       throw new Error(`ElevenLabs upload API error: ${uploadResponse.status} ${errorText}`);
     }
     
-    // 3. Start conversion
     const startResponse = await fetch(`https://api.elevenlabs.io/v1/speech-to-speech/convert/${conversionId}/start`, {
       method: 'POST',
       headers: {
@@ -434,12 +413,11 @@ export const generateAvatarVideo = async (
       throw new Error(`ElevenLabs start conversion API error: ${startResponse.status} ${errorText}`);
     }
     
-    // 4. Poll for completion
     let videoUrl = "";
-    let maxAttempts = 30; // 5 minutes (30 * 10s)
+    let maxAttempts = 30;
     
     for (let i = 0; i < maxAttempts; i++) {
-      await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+      await new Promise(resolve => setTimeout(resolve, 10000));
       
       const statusResponse = await fetch(`https://api.elevenlabs.io/v1/speech-to-speech/convert/${conversionId}`, {
         method: 'GET',
@@ -466,7 +444,6 @@ export const generateAvatarVideo = async (
       throw new Error("ElevenLabs conversion timed out");
     }
     
-    // Update the key's usage stats after successful generation
     try {
       const keys = await fetchElevenLabsApiKeys(userId);
       const usedKey = keys.find(k => k.key === apiKey);
@@ -482,13 +459,12 @@ export const generateAvatarVideo = async (
       }
     } catch (error) {
       console.error('Error updating key usage stats:', error);
-      // Don't fail the video generation if this fails
     }
     
     return videoUrl;
   } catch (error) {
     if (error instanceof Error && error.message.includes('All ElevenLabs API keys have reached their quota')) {
-      throw error; // Rethrow quota error
+      throw error;
     }
     
     console.error('Error generating avatar:', error);
@@ -496,16 +472,13 @@ export const generateAvatarVideo = async (
   }
 };
 
-// Helper function to ensure status is one of the valid types
 function ensureValidStatus(status: string): 'draft' | 'processing' | 'completed' {
   if (status === 'draft' || status === 'processing' || status === 'completed') {
     return status;
   }
-  // Default to draft if the status is not one of the expected values
   return 'draft';
 }
 
-// Helper function to get flag emoji based on language code
 function getLanguageFlag(code: string): string {
   const flags: Record<string, string> = {
     'en': '🇺🇸',
