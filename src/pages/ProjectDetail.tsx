@@ -6,11 +6,13 @@ import { GlassPanel } from "@/components/ui/GlassMorphism";
 import { AnimatedButton } from "@/components/ui/AnimatedButton";
 import Header from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
-import { supabase, getMediaUrl, checkMediaFileExists, ensurePodcastsBucketExists } from "@/integrations/supabase/client";
+import { supabase, getMediaUrl, checkMediaFileExists, ensurePodcastsBucketExists, deleteMediaFile } from "@/integrations/supabase/client";
 import PodcastPreview from "@/components/PodcastPreview";
 import ProjectGenerator from "@/components/ProjectGenerator";
 import { toast } from "sonner";
 import { asType, convertToAppModel } from "@/utils/typeUtils";
+import { Button } from "@/components/ui/button";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -225,6 +227,99 @@ const ProjectDetail = () => {
     });
   };
 
+  const handleDeletePodcast = async () => {
+    if (!project?.id) return;
+    
+    try {
+      toast.info("Deleting podcast...");
+      
+      await deleteMediaFile(project.id);
+      
+      const { error } = await supabase
+        .from('projects')
+        .update({
+          status: 'draft'
+        })
+        .eq('id', project.id);
+        
+      if (error) throw error;
+      
+      setProject(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          status: 'draft',
+          updated_at: new Date().toISOString()
+        };
+      });
+      
+      setMediaUrls({});
+      setMediaFilesExist({
+        video: false,
+        audio: false
+      });
+      
+      toast.success("Podcast deleted successfully", {
+        description: "Your podcast has been reset to draft status."
+      });
+    } catch (error) {
+      console.error("Error deleting podcast:", error);
+      toast.error("Delete failed", {
+        description: "There was a problem deleting your podcast."
+      });
+    }
+  };
+  
+  const handleUpdatePodcast = () => {
+    if (!project?.id) return;
+    
+    setProject(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        status: 'draft',
+        updated_at: new Date().toISOString()
+      };
+    });
+    
+    toast.info("Podcast ready for update", {
+      description: "You can now make changes and regenerate your podcast."
+    });
+  };
+  
+  const handleResetPodcast = async () => {
+    if (!project?.id) return;
+    
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({
+          status: 'draft'
+        })
+        .eq('id', project.id);
+        
+      if (error) throw error;
+      
+      setProject(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          status: 'draft',
+          updated_at: new Date().toISOString()
+        };
+      });
+      
+      toast.success("Podcast reset successfully", {
+        description: "Your podcast has been reset to draft status, but media files are still available."
+      });
+    } catch (error) {
+      console.error("Error resetting podcast:", error);
+      toast.error("Reset failed", {
+        description: "There was a problem resetting your podcast."
+      });
+    }
+  };
+
   if (!loading && !user) {
     return <Navigate to="/auth" replace />;
   }
@@ -286,6 +381,11 @@ const ProjectDetail = () => {
                   previewUrl={mediaUrls.video}
                   audioUrl={mediaUrls.audio}
                   generationError={generationError}
+                  onDeleteClick={() => {
+                    document.getElementById('delete-podcast-trigger')?.click();
+                  }}
+                  onUpdateClick={handleUpdatePodcast}
+                  onResetClick={handleResetPodcast}
                 />
                 
                 {project.status !== 'processing' && (
@@ -399,6 +499,25 @@ const ProjectDetail = () => {
           </div>
         </div>
       </main>
+      
+      <AlertDialog>
+        <AlertDialogTrigger id="delete-podcast-trigger" className="hidden">Delete</AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Podcast</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will delete your podcast media files and reset the project to draft state. 
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeletePodcast} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

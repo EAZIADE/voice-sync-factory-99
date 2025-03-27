@@ -5,11 +5,17 @@ import CharacterControls, { CharacterControlState } from "./CharacterControls";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { toast } from "sonner";
+import { Button } from "./ui/button";
+import { Trash, Pencil, RotateCcw } from "lucide-react";
+import { downloadMediaFile, deleteMediaFile } from "@/integrations/supabase/client";
 
 interface PodcastPreviewProps {
   projectId?: string;
   status?: 'draft' | 'processing' | 'completed';
   onGenerateClick?: () => void;
+  onDeleteClick?: () => void;
+  onUpdateClick?: () => void;
+  onResetClick?: () => void;
   previewUrl?: string;
   audioUrl?: string;
   generationError?: string | null;
@@ -19,6 +25,9 @@ const PodcastPreview = ({
   projectId, 
   status = 'draft', 
   onGenerateClick, 
+  onDeleteClick,
+  onUpdateClick,
+  onResetClick,
   previewUrl, 
   audioUrl,
   generationError 
@@ -377,7 +386,7 @@ const PodcastPreview = ({
     }
   };
   
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (status !== 'completed') {
       hookToast({
         title: "Podcast not ready",
@@ -387,30 +396,69 @@ const PodcastPreview = ({
       return;
     }
     
-    const downloadUrl = mediaType === 'video' 
-      ? (videoError || !sanitizeMediaUrl(videoSource) ? demoVideoUrl : videoSource)
-      : (audioError || !sanitizeMediaUrl(audioSource) ? demoAudioUrl : audioSource);
-    const fileType = mediaType === 'video' ? 'video.mp4' : 'audio.mp3';
-    const fileName = `podcast-${projectId || 'demo'}-${fileType}`;
-    
-    console.log("Starting download with URL:", downloadUrl);
-    console.log("File name:", fileName);
-    
-    toast.success("Download started", {
-      description: `Your podcast ${mediaType} is being prepared for download.`
+    if (!projectId) {
+      hookToast({
+        title: "Project ID missing",
+        description: "Cannot download without a valid project ID.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    toast.info("Download started", {
+      description: `Preparing your podcast ${mediaType} for download...`
     });
     
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = fileName;
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    toast.info("Download initiated", {
-      description: `If download doesn't start automatically, right-click on the media player and select 'Save as'.`
-    });
+    try {
+      const result = await downloadMediaFile(projectId, mediaType);
+      
+      if (!result.success) {
+        toast.error("Download failed", {
+          description: result.message || "Failed to download media file."
+        });
+        return;
+      }
+      
+      const a = document.createElement('a');
+      a.href = result.url;
+      a.download = `podcast-${projectId}-${mediaType === 'video' ? 'video.mp4' : 'audio.mp3'}`;
+      document.body.appendChild(a);
+      a.click();
+      
+      setTimeout(() => {
+        document.body.removeChild(a);
+        if (result.url.startsWith('blob:')) {
+          URL.revokeObjectURL(result.url);
+        }
+      }, 100);
+      
+      toast.success("Download initiated", {
+        description: `Your ${mediaType} is being downloaded.`
+      });
+    } catch (error) {
+      console.error("Error in handleDownload:", error);
+      toast.error("Download failed", {
+        description: "An unexpected error occurred during download."
+      });
+    }
+  };
+
+  const handleDelete = () => {
+    if (onDeleteClick) {
+      onDeleteClick();
+    }
+  };
+
+  const handleUpdate = () => {
+    if (onUpdateClick) {
+      onUpdateClick();
+    }
+  };
+
+  const handleReset = () => {
+    if (onResetClick) {
+      onResetClick();
+    }
   };
   
   return (
@@ -624,14 +672,42 @@ const PodcastPreview = ({
                     Processing...
                   </AnimatedButton>
                 ) : (
-                  <AnimatedButton variant="gradient" onClick={handleDownload}>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                      <polyline points="7 10 12 15 17 10"></polyline>
-                      <line x1="12" y1="15" x2="12" y2="3"></line>
-                    </svg>
-                    Download {mediaType.charAt(0).toUpperCase() + mediaType.slice(1)}
-                  </AnimatedButton>
+                  <div className="flex flex-wrap gap-2">
+                    <AnimatedButton variant="gradient" onClick={handleDownload}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                      </svg>
+                      Download
+                    </AnimatedButton>
+                    
+                    {status === 'completed' && (
+                      <>
+                        <Button 
+                          variant="destructive" 
+                          onClick={handleDelete}
+                          className="flex items-center gap-1"
+                        >
+                          <Trash size={16} /> Delete
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          onClick={handleUpdate}
+                          className="flex items-center gap-1"
+                        >
+                          <Pencil size={16} /> Update
+                        </Button>
+                        <Button 
+                          variant="secondary" 
+                          onClick={handleReset}
+                          className="flex items-center gap-1"
+                        >
+                          <RotateCcw size={16} /> Reset
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
