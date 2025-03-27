@@ -58,5 +58,5 @@ declare module './types' {
   }
 }
 
-// Export types for use in other files
-export type Database = SupabaseDatabase;
+// Export the Database type from the original file without creating a duplicate identifier
+export type { Database } from './types';
