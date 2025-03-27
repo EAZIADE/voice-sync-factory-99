@@ -50,7 +50,24 @@ export interface ExtendedDatabase {
       };
     } & SupabaseDatabase['public']['Tables'];
     Views: SupabaseDatabase['public']['Views'];
-    Functions: SupabaseDatabase['public']['Functions'];
+    Functions: {
+      get_elevenlabs_api_keys: {
+        Args: {
+          user_id_param: string;
+        };
+        Returns: {
+          id: string;
+          user_id: string;
+          key: string;
+          name: string;
+          is_active: boolean;
+          quota_remaining: number | null;
+          last_used: string | null;
+          created_at: string;
+          updated_at: string | null;
+        }[];
+      };
+    } & SupabaseDatabase['public']['Functions'];
     Enums: SupabaseDatabase['public']['Enums'];
     CompositeTypes: SupabaseDatabase['public']['CompositeTypes'];
   };

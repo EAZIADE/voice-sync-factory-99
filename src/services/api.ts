@@ -108,7 +108,9 @@ export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabs
   try {
     // First try using RPC if available
     const { data: rpcData, error: rpcError } = await supabase
-      .rpc('get_elevenlabs_api_keys', { user_id_param: userId } as any);
+      .rpc('get_elevenlabs_api_keys', {
+        user_id_param: userId
+      });
     
     if (!rpcError && rpcData) {
       return rpcData as ElevenLabsApiKey[];
