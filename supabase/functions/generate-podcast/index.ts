@@ -15,14 +15,38 @@ serve(async (req: Request) => {
   }
 
   try {
-    // Get the request body
-    const { projectId, characterControls } = await req.json();
+    // Parse the request body
+    const requestText = await req.text();
+    console.log("Raw request body:", requestText);
     
-    console.log("Request received for project:", projectId);
-    console.log("With character controls:", characterControls);
+    let projectId, characterControls;
+    
+    try {
+      const requestData = JSON.parse(requestText);
+      projectId = requestData.projectId;
+      characterControls = requestData.characterControls;
+      
+      console.log("Request received for project:", projectId);
+      console.log("With character controls:", characterControls);
+    } catch (parseError) {
+      console.error("Error parsing request body:", parseError);
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON in request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    if (!projectId) {
+      return new Response(
+        JSON.stringify({ error: "Missing required parameter: projectId" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
     // Get the authorization header
     const authHeader = req.headers.get('Authorization');
+    console.log("Auth header present:", !!authHeader);
+    
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "No authorization header" }),
@@ -31,36 +55,71 @@ serve(async (req: Request) => {
     }
 
     // Create a Supabase client with the auth header
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    
+    console.log("Supabase URL available:", !!supabaseUrl);
+    console.log("Supabase Anon Key available:", !!supabaseAnonKey);
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return new Response(
+        JSON.stringify({ error: "Server configuration error: missing Supabase credentials" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      supabaseUrl,
+      supabaseAnonKey,
       { global: { headers: { Authorization: authHeader } } }
     );
     
     // First verify the project exists and belongs to the user
+    console.log("Fetching project data for ID:", projectId);
     const { data: projectData, error: projectError } = await supabaseClient
       .from('projects')
       .select('*, user_id')
       .eq('id', projectId)
       .single();
       
-    if (projectError || !projectData) {
+    if (projectError) {
       console.error("Project error:", projectError);
       return new Response(
-        JSON.stringify({ error: "Project not found or not authorized" }),
+        JSON.stringify({ error: `Project not found or not authorized: ${projectError.message}` }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    if (!projectData) {
+      console.error("No project data found");
+      return new Response(
+        JSON.stringify({ error: "Project not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     
     // Get authenticated user information
+    console.log("Getting authenticated user");
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     
-    if (userError || !user) {
+    if (userError) {
+      console.error("User auth error:", userError);
       return new Response(
-        JSON.stringify({ error: "User authentication error" }),
+        JSON.stringify({ error: `User authentication error: ${userError.message}` }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    
+    if (!user) {
+      console.error("No authenticated user found");
+      return new Response(
+        JSON.stringify({ error: "Not authenticated" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    console.log("Authenticated user ID:", user.id);
+    console.log("Project user ID:", projectData.user_id);
     
     // Verify user owns this project
     if (projectData.user_id !== user.id) {
@@ -71,6 +130,7 @@ serve(async (req: Request) => {
     }
     
     // Get active ElevenLabs API key for this user
+    console.log("Fetching ElevenLabs API keys");
     const { data: keys, error: keysError } = await supabaseClient
       .from('elevenlabs_api_keys')
       .select('*')
@@ -78,7 +138,17 @@ serve(async (req: Request) => {
       .eq('is_active', true)
       .order('created_at', { ascending: false });
       
-    if (keysError || !keys || keys.length === 0) {
+    if (keysError) {
+      console.error("Error fetching API keys:", keysError);
+      return new Response(
+        JSON.stringify({ error: `Error fetching ElevenLabs API keys: ${keysError.message}` }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    console.log(`Found ${keys?.length || 0} active API keys`);
+    
+    if (!keys || keys.length === 0) {
       return new Response(
         JSON.stringify({ error: "No active ElevenLabs API key found. Please add an API key in your dashboard." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -89,6 +159,7 @@ serve(async (req: Request) => {
     const apiKey = keys[0].key;
     
     // Update project status to processing
+    console.log("Updating project status to processing");
     const { error: updateError } = await supabaseClient
       .from('projects')
       .update({ status: 'processing', updated_at: new Date().toISOString() })
@@ -97,7 +168,7 @@ serve(async (req: Request) => {
     if (updateError) {
       console.error("Update error:", updateError);
       return new Response(
-        JSON.stringify({ error: "Failed to update project status" }),
+        JSON.stringify({ error: `Failed to update project status: ${updateError.message}` }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

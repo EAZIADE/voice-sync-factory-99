@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -123,7 +124,11 @@ const ProjectDetail = () => {
     setGenerationError(null);
     
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cvfqcvytoobplgracobg.supabase.co';
+      
+      console.log("Generating podcast with URL:", `${supabaseUrl}/functions/v1/generate-podcast`);
+      console.log("Project ID:", id);
+      console.log("Session token available:", !!session.access_token);
       
       const response = await fetch(`${supabaseUrl}/functions/v1/generate-podcast`, {
         method: 'POST',
@@ -143,16 +148,25 @@ const ProjectDetail = () => {
         })
       });
       
+      console.log("Response status:", response.status);
+      
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Error response:", errorText);
-        let errorMessage;
+        let errorMessage = 'Failed to generate podcast';
         
         try {
-          const errorJson = JSON.parse(errorText);
-          errorMessage = errorJson.error || 'Failed to generate podcast';
-        } catch {
-          errorMessage = errorText || 'Failed to generate podcast';
+          const errorText = await response.text();
+          console.log("Error response text:", errorText);
+          
+          try {
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.error || errorMessage;
+            console.log("Parsed error message:", errorMessage);
+          } catch (jsonError) {
+            errorMessage = errorText || errorMessage;
+            console.log("Using text as error message:", errorMessage);
+          }
+        } catch (textError) {
+          console.log("Could not read error response text:", textError);
         }
         
         setGenerationError(errorMessage);
