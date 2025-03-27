@@ -59,4 +59,4 @@ declare module './types' {
 }
 
 // Export types for use in other files
-export type { SupabaseDatabase };
+export type Database = SupabaseDatabase;
