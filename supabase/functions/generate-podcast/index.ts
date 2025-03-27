@@ -1,5 +1,5 @@
 
-// Function to generate AI podcasts with character animation
+// Function to generate AI podcasts with character animation using ElevenLabs API
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.23.0";
 
@@ -7,11 +7,6 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-// Google API keys - these should be moved to Supabase secrets in production
-const NOTEBOOKLM_API_KEY = Deno.env.get('GOOGLE_NOTEBOOKLM_API_KEY') || '';
-const GEMINI_API_KEY = Deno.env.get('GOOGLE_GEMINI_API_KEY') || '';
-const STUDIO_API_KEY = Deno.env.get('GOOGLE_STUDIO_API_KEY') || '';
 
 serve(async (req: Request) => {
   // Handle CORS preflight requests
@@ -42,6 +37,15 @@ serve(async (req: Request) => {
       { global: { headers: { Authorization: authHeader } } }
     );
     
+    // Get ElevenLabs API key from environment
+    const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
+    if (!ELEVENLABS_API_KEY) {
+      return new Response(
+        JSON.stringify({ error: "ElevenLabs API key not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     // First verify the project exists and belongs to the user
     const { data: projectData, error: projectError } = await supabaseClient
       .from('projects')
@@ -71,9 +75,6 @@ serve(async (req: Request) => {
       );
     }
     
-    console.log("Starting podcast generation for project:", projectId);
-    console.log("Using character controls:", characterControls);
-    
     // Create a storage bucket for podcasts if it doesn't exist
     try {
       const { data: bucketData, error: bucketError } = await supabaseClient
@@ -93,208 +94,184 @@ serve(async (req: Request) => {
       console.error("Error ensuring bucket exists:", error);
     }
     
-    // This would be done asynchronously in a real edge function using a queue or background task
-    // For this demo, we'll use a setTimeout to simulate the async process
+    // This part would be done asynchronously in a real edge function using a queue or background task
     setTimeout(async () => {
       try {
-        // Script content - use actual project script if available
+        // Get script content from project or use default
         const scriptContent = projectData.script || "Welcome to this AI-generated podcast. Today we're discussing the fascinating world of artificial intelligence and its applications in modern technology.";
         
-        // Step 1: Generate podcast script content with Google NotebookLM
-        let podcastScriptContent = scriptContent;
-        try {
-          if (NOTEBOOKLM_API_KEY) {
-            console.log("Generating podcast script with Google NotebookLM");
-            const notebookLMResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/notebooklm:generateContent`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': NOTEBOOKLM_API_KEY
-              },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    role: "user",
-                    parts: [{ text: `Create a podcast script based on the following topic: ${scriptContent}` }]
-                  }
-                ],
-                generationConfig: {
-                  temperature: 0.7,
-                  maxOutputTokens: 1024
-                }
-              })
-            });
-            
-            if (notebookLMResponse.ok) {
-              const notebookData = await notebookLMResponse.json();
-              // Extract the generated content - structure may vary based on the actual API response
-              if (notebookData.candidates && notebookData.candidates[0]?.content?.parts[0]?.text) {
-                podcastScriptContent = notebookData.candidates[0].content.parts[0].text;
-                console.log("Successfully generated podcast script content");
-              }
-            } else {
-              console.error("NotebookLM API error:", await notebookLMResponse.text());
+        console.log("Starting ElevenLabs text-to-speech generation");
+        
+        // Step 1: Generate audio using ElevenLabs TTS API
+        // Using a default voice ID - in a real app, you would map from selected_hosts
+        const voiceId = "21m00Tcm4TlvDq8ikWAM"; // Default ElevenLabs voice ID (Rachel)
+        
+        const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'xi-api-key': ELEVENLABS_API_KEY
+          },
+          body: JSON.stringify({
+            text: scriptContent,
+            model_id: "eleven_monolingual_v1",
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.75,
+              style: 0.0,
+              use_speaker_boost: true
             }
-          } else {
-            console.log("No NotebookLM API key - using existing script");
-          }
-        } catch (error) {
-          console.error("Error using NotebookLM API:", error);
+          })
+        });
+        
+        if (!ttsResponse.ok) {
+          throw new Error(`ElevenLabs TTS API error: ${ttsResponse.status} ${await ttsResponse.text()}`);
         }
         
-        // Step 2: Generate host images with Google Studio
-        let hostImageUrl = "";
-        try {
-          if (STUDIO_API_KEY) {
-            console.log("Generating host image with Google Studio");
-            const studioResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagegeneration:generateContent`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': STUDIO_API_KEY
-              },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    role: "user",
-                    parts: [{ text: "Generate a professional podcast host in a studio setting, high quality, photorealistic" }]
-                  }
-                ],
-                generationConfig: {
-                  temperature: 0.4
-                }
-              })
-            });
-            
-            if (studioResponse.ok) {
-              const studioData = await studioResponse.json();
-              // Extract the generated image URL - structure may vary based on the actual API response
-              if (studioData.candidates && studioData.candidates[0]?.content?.parts[0]?.inlineData?.data) {
-                // Store the base64 image
-                const base64Image = studioData.candidates[0].content.parts[0].inlineData.data;
-                const imageBlob = await fetch(`data:image/jpeg;base64,${base64Image}`).then(r => r.blob());
-                
-                // Upload to Supabase storage
-                const { data: uploadData, error: uploadError } = await supabaseClient
-                  .storage
-                  .from('podcasts')
-                  .upload(`${projectId}/host.jpg`, imageBlob, {
-                    contentType: 'image/jpeg',
-                    upsert: true
-                  });
-                  
-                if (uploadError) {
-                  console.error("Error uploading host image:", uploadError);
-                } else {
-                  console.log("Successfully uploaded host image");
-                  
-                  // Get the public URL
-                  const { data: urlData } = await supabaseClient
-                    .storage
-                    .from('podcasts')
-                    .getPublicUrl(`${projectId}/host.jpg`);
-                    
-                  hostImageUrl = urlData.publicUrl;
-                }
-              }
-            } else {
-              console.error("Studio API error:", await studioResponse.text());
-            }
-          } else {
-            console.log("No Studio API key - skipping host image generation");
-          }
-        } catch (error) {
-          console.error("Error using Studio API:", error);
+        // Get the audio as a blob
+        const audioBlob = await ttsResponse.blob();
+        
+        // Upload audio to Supabase storage
+        const { error: audioUploadError } = await supabaseClient
+          .storage
+          .from('podcasts')
+          .upload(`${projectId}/audio.mp3`, audioBlob, {
+            contentType: 'audio/mpeg',
+            upsert: true
+          });
+          
+        if (audioUploadError) {
+          throw new Error(`Error uploading audio: ${audioUploadError.message}`);
         }
         
-        // Step 3: Generate the animated video with Gemini
-        try {
-          // For demo purposes, we'll use a sample video if no Gemini API available
-          // In production, this would actually call the Gemini API with the host image and script
-          const sampleVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-business-woman-talking-4796-large.mp4";
-          
-          if (GEMINI_API_KEY && hostImageUrl) {
-            console.log("Generating animated video with Gemini API");
-            
-            // Note: This is a placeholder implementation as Gemini doesn't directly 
-            // create videos like this yet. In a real implementation, you would:
-            // 1. Use Gemini API to generate animation keyframes
-            // 2. Use another service to combine these into a video
-            
-            const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': GEMINI_API_KEY
-              },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    role: "user",
-                    parts: [
-                      { text: `Animate this podcast host speaking the following script: "${podcastScriptContent.substring(0, 500)}"` },
-                      {
-                        inlineData: {
-                          mimeType: "image/jpeg",
-                          data: hostImageUrl // This would need encoding in a real implementation
-                        }
-                      }
-                    ]
-                  }
-                ],
-                generationConfig: {
-                  temperature: 0.2,
-                  maxOutputTokens: 2048
-                }
-              })
-            });
-            
-            if (geminiResponse.ok) {
-              // Process Gemini response (in reality this would come from another animation service)
-              console.log("Successfully received Gemini API response");
-            } else {
-              console.error("Gemini API error:", await geminiResponse.text());
+        console.log("Successfully generated and uploaded audio");
+        
+        // Step 2: Generate avatar video using ElevenLabs API
+        console.log("Starting ElevenLabs video generation");
+        
+        // First we need to create a speech conversion task
+        const speechConversionResponse = await fetch("https://api.elevenlabs.io/v1/speech-to-speech/convert", {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'xi-api-key': ELEVENLABS_API_KEY
+          },
+          body: JSON.stringify({
+            voice_id: voiceId,
+            generation_config: {
+              model_id: "eleven_english_sts_v2"
             }
+          })
+        });
+        
+        if (!speechConversionResponse.ok) {
+          throw new Error(`ElevenLabs speech conversion API error: ${speechConversionResponse.status} ${await speechConversionResponse.text()}`);
+        }
+        
+        const conversionData = await speechConversionResponse.json();
+        const conversionId = conversionData.conversion_id;
+        
+        // Upload the audio file to the conversion
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'audio.mp3');
+        
+        const uploadResponse = await fetch(`https://api.elevenlabs.io/v1/speech-to-speech/convert/${conversionId}/audio`, {
+          method: 'POST',
+          headers: {
+            'xi-api-key': ELEVENLABS_API_KEY
+          },
+          body: formData
+        });
+        
+        if (!uploadResponse.ok) {
+          throw new Error(`ElevenLabs upload API error: ${uploadResponse.status} ${await uploadResponse.text()}`);
+        }
+        
+        // Start the conversion
+        const startResponse = await fetch(`https://api.elevenlabs.io/v1/speech-to-speech/convert/${conversionId}/start`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'xi-api-key': ELEVENLABS_API_KEY
+          },
+          body: JSON.stringify({})
+        });
+        
+        if (!startResponse.ok) {
+          throw new Error(`ElevenLabs start conversion API error: ${startResponse.status} ${await startResponse.text()}`);
+        }
+        
+        // Poll for conversion completion
+        let conversionComplete = false;
+        let videoUrl = "";
+        
+        for (let i = 0; i < 30; i++) { // Try for 5 minutes (30 * 10s)
+          await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+          
+          const statusResponse = await fetch(`https://api.elevenlabs.io/v1/speech-to-speech/convert/${conversionId}`, {
+            method: 'GET',
+            headers: {
+              'xi-api-key': ELEVENLABS_API_KEY
+            }
+          });
+          
+          if (!statusResponse.ok) {
+            console.error(`Error checking conversion status: ${statusResponse.status}`);
+            continue;
           }
           
-          // For now, we'll use the sample video in either case
-          console.log("Downloading sample video as placeholder for Gemini output");
-          const videoResponse = await fetch(sampleVideoUrl);
-          if (!videoResponse.ok) {
-            throw new Error("Failed to fetch sample video");
+          const statusData = await statusResponse.json();
+          
+          if (statusData.status === "completed") {
+            conversionComplete = true;
+            videoUrl = statusData.output_url;
+            break;
+          } else if (statusData.status === "failed") {
+            throw new Error(`ElevenLabs conversion failed: ${statusData.error || "Unknown error"}`);
           }
           
-          const videoBlob = await videoResponse.blob();
+          console.log(`Conversion status: ${statusData.status}, progress: ${statusData.progress || "unknown"}`);
+        }
+        
+        if (!conversionComplete) {
+          throw new Error("ElevenLabs conversion timed out");
+        }
+        
+        // Download the video from ElevenLabs
+        console.log(`Downloading video from ${videoUrl}`);
+        const videoResponse = await fetch(videoUrl);
+        
+        if (!videoResponse.ok) {
+          throw new Error(`Error downloading video: ${videoResponse.status}`);
+        }
+        
+        const videoBlob = await videoResponse.blob();
+        
+        // Upload to Supabase storage
+        const { error: uploadError } = await supabaseClient
+          .storage
+          .from('podcasts')
+          .upload(`${projectId}/video.mp4`, videoBlob, {
+            contentType: 'video/mp4',
+            upsert: true
+          });
           
-          // Upload to Supabase storage
-          const { error: uploadError } = await supabaseClient
-            .storage
-            .from('podcasts')
-            .upload(`${projectId}/video.mp4`, videoBlob, {
-              contentType: 'video/mp4',
-              upsert: true
-            });
-            
-          if (uploadError) {
-            console.error("Error uploading video:", uploadError);
-            throw uploadError;
-          }
+        if (uploadError) {
+          throw new Error(`Error uploading video: ${uploadError.message}`);
+        }
+        
+        console.log("Successfully uploaded video for project:", projectId);
+        
+        // Make the file publicly accessible
+        const { data: publicUrlData, error: publicUrlError } = await supabaseClient
+          .storage
+          .from('podcasts')
+          .getPublicUrl(`${projectId}/video.mp4`);
           
-          console.log("Successfully uploaded video for project:", projectId);
-          
-          // Make the file publicly accessible
-          const { data: publicUrlData, error: publicUrlError } = await supabaseClient
-            .storage
-            .from('podcasts')
-            .getPublicUrl(`${projectId}/video.mp4`);
-            
-          if (publicUrlError) {
-            console.error("Error getting public URL:", publicUrlError);
-          } else {
-            console.log("Public URL for video:", publicUrlData.publicUrl);
-          }
-        } catch (error) {
-          console.error("Error handling video generation:", error);
+        if (publicUrlError) {
+          console.error("Error getting public URL:", publicUrlError);
+        } else {
+          console.log("Public URL for video:", publicUrlData.publicUrl);
         }
         
         // After processing is complete, update the project
@@ -327,7 +304,7 @@ serve(async (req: Request) => {
           console.error("Error rolling back project status:", rollbackError);
         }
       }
-    }, 10000); // Reduce to 10 seconds for faster testing
+    }, 1000); // Reduced to 1 second for faster testing
     
     return new Response(
       JSON.stringify({ 

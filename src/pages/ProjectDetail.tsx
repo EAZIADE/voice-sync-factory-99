@@ -15,6 +15,7 @@ const ProjectDetail = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -119,6 +120,7 @@ const ProjectDetail = () => {
     if (!project || !id || !user || !session) return;
     
     setIsGenerating(true);
+    setGenerationError(null);
     
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -144,7 +146,17 @@ const ProjectDetail = () => {
       if (!response.ok) {
         const errorText = await response.text();
         console.error("Error response:", errorText);
-        throw new Error(errorText || 'Failed to generate podcast');
+        let errorMessage;
+        
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || 'Failed to generate podcast';
+        } catch {
+          errorMessage = errorText || 'Failed to generate podcast';
+        }
+        
+        setGenerationError(errorMessage);
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
@@ -152,7 +164,7 @@ const ProjectDetail = () => {
       
       toast({
         title: "AI Processing Started",
-        description: "Your podcast is being generated with Google NotebookLM, Studio and Gemini. This may take a few minutes.",
+        description: "Your podcast is being generated with ElevenLabs. This may take a few minutes.",
       });
       
       setProject(prev => {
@@ -218,7 +230,12 @@ const ProjectDetail = () => {
     ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/podcasts/${project.id}/video.mp4` 
     : undefined;
   
+  const audioUrl = (project?.status === 'completed' && project?.id)
+    ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/podcasts/${project.id}/audio.mp3` 
+    : undefined;
+  
   console.log("Video URL:", videoUrl);
+  console.log("Audio URL:", audioUrl);
 
   return (
     <div className="min-h-screen bg-background">
@@ -241,6 +258,8 @@ const ProjectDetail = () => {
                 status={project?.status}
                 onGenerateClick={handleGeneratePodcast}
                 previewUrl={videoUrl}
+                audioUrl={audioUrl}
+                generationError={generationError}
               />
             </div>
             
@@ -287,9 +306,23 @@ const ProjectDetail = () => {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <span className="text-amber-700 text-sm">Your podcast is being generated with Google AI. This process typically takes a few minutes.</span>
+                        <span className="text-amber-700 text-sm">Your podcast is being generated with ElevenLabs AI. This process typically takes a few minutes.</span>
                       </div>
                     </div>
+                  )}
+                  
+                  {generationError && (
+                    <div className="bg-red-500/10 p-4 rounded-md border border-red-500/20">
+                        <div className="flex items-start">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3 text-red-500 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          <div>
+                            <h4 className="text-sm font-medium text-red-700">Generation Error</h4>
+                            <p className="text-xs text-red-600 mt-1">{generationError}</p>
+                          </div>
+                        </div>
+                      </div>
                   )}
                   
                   <div className="pt-2">
