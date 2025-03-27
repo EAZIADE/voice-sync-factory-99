@@ -1,7 +1,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { Host, Template, Language, Project, ElevenLabsApiKey } from "@/types";
-import "@/integrations/supabase/type-extensions";
+import { Database } from "@/integrations/supabase/type-extensions";
 
 // Host related API calls
 export const fetchHosts = async (): Promise<Host[]> => {
@@ -118,7 +118,7 @@ export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabs
     // Fallback to direct query if RPC fails or is unavailable
     console.log("RPC failed or unavailable, falling back to direct query");
     const { data, error } = await supabase
-      .from('elevenlabs_api_keys' as any)
+      .from('elevenlabs_api_keys' as keyof Database['public']['Tables'])
       .select('*')
       .eq('user_id', userId)
       .order('is_active', { ascending: false })
@@ -144,7 +144,7 @@ export const addElevenLabsApiKey = async (keyData: Omit<ElevenLabsApiKey, 'id' |
   }
   
   const { data, error } = await supabase
-    .from('elevenlabs_api_keys' as any)
+    .from('elevenlabs_api_keys' as keyof Database['public']['Tables'])
     .insert([keyData as any])
     .select('*')
     .single();
@@ -159,7 +159,7 @@ export const addElevenLabsApiKey = async (keyData: Omit<ElevenLabsApiKey, 'id' |
 
 export const updateElevenLabsApiKey = async (id: string, updates: Partial<ElevenLabsApiKey>): Promise<ElevenLabsApiKey> => {
   const { data, error } = await supabase
-    .from('elevenlabs_api_keys' as any)
+    .from('elevenlabs_api_keys' as keyof Database['public']['Tables'])
     .update(updates as any)
     .eq('id', id)
     .select('*')
@@ -175,7 +175,7 @@ export const updateElevenLabsApiKey = async (id: string, updates: Partial<Eleven
 
 export const deleteElevenLabsApiKey = async (id: string): Promise<void> => {
   const { error } = await supabase
-    .from('elevenlabs_api_keys' as any)
+    .from('elevenlabs_api_keys' as keyof Database['public']['Tables'])
     .delete()
     .eq('id', id);
   
