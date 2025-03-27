@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from "react";
 import { GlassCard, GlassPanel } from "./ui/GlassMorphism";
 import { AnimatedButton } from "./ui/AnimatedButton";
@@ -44,11 +43,11 @@ const PodcastPreview = ({
   const demoAudioUrl = "https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3";
   
   // Determine media source - ensure it's a valid URL with proper validation
-  const videoSource = status === 'completed' && previewUrl && typeof previewUrl === 'string' 
+  const videoSource = status === 'completed' && previewUrl && typeof previewUrl === 'string' && previewUrl.startsWith('http')
     ? previewUrl 
     : demoVideoUrl;
     
-  const audioSource = status === 'completed' && audioUrl && typeof audioUrl === 'string'
+  const audioSource = status === 'completed' && audioUrl && typeof audioUrl === 'string' && audioUrl.startsWith('http')
     ? audioUrl
     : demoAudioUrl;
   
@@ -56,9 +55,18 @@ const PodcastPreview = ({
     // Reset video error when source changes
     setVideoError(null);
     
+    console.log("Media source updates - Video:", videoSource, "Audio:", audioSource);
+    
     // When status changes to completed, check if the media is actually available
     if (status === 'completed') {
       if (previewUrl) {
+        if (!previewUrl.startsWith('http')) {
+          console.error("Invalid video URL:", previewUrl);
+          setVideoError("Invalid video URL format");
+          setMediaType('audio');
+          return;
+        }
+        
         fetch(previewUrl, { method: 'HEAD' })
           .then(response => {
             if (!response.ok) {
@@ -290,6 +298,11 @@ const PodcastPreview = ({
                   crossOrigin="anonymous"
                   onClick={togglePlayback}
                   onEnded={() => setIsPlaying(false)}
+                  onError={(e) => {
+                    console.error("Video element error:", e);
+                    setVideoError("Video playback error - unable to load video");
+                    setMediaType('audio');
+                  }}
                 />
               ) : (
                 <>
@@ -306,6 +319,14 @@ const PodcastPreview = ({
                     src={audioSource}
                     preload="auto"
                     onEnded={() => setIsPlaying(false)}
+                    onError={(e) => {
+                      console.error("Audio element error:", e);
+                      toast({
+                        title: "Audio Playback Error",
+                        description: "Unable to load audio file",
+                        variant: "destructive"
+                      });
+                    }}
                     className="hidden"
                   />
                 </>

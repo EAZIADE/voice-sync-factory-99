@@ -1,4 +1,3 @@
-
 // Function to generate AI podcasts with character animation using ElevenLabs API
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.23.0";
@@ -324,7 +323,8 @@ serve(async (req: Request) => {
         }
         
         // Upload audio to Supabase storage
-        const { error: audioUploadError } = await supabaseClient
+        console.log(`Attempting to upload audio file to podcasts/${projectId}/audio.mp3`);
+        const { error: audioUploadError, data: audioUploadData } = await supabaseClient
           .storage
           .from('podcasts')
           .upload(`${projectId}/audio.mp3`, audioBlob, {
@@ -333,10 +333,11 @@ serve(async (req: Request) => {
           });
           
         if (audioUploadError) {
+          console.error("Error uploading audio:", audioUploadError);
           throw new Error(`Error uploading audio: ${audioUploadError.message}`);
         }
         
-        console.log("Successfully generated and uploaded audio");
+        console.log("Successfully generated and uploaded audio:", audioUploadData);
         
         // Step 2: Generate avatar video using ElevenLabs API
         console.log("Starting ElevenLabs video generation");
@@ -506,13 +507,21 @@ serve(async (req: Request) => {
         const videoResponse = await fetch(videoUrl);
         
         if (!videoResponse.ok) {
-          throw new Error(`Error downloading video: ${videoResponse.status}`);
+          console.error("Error downloading video:", videoResponse.status, videoResponse.statusText);
+          throw new Error(`Error downloading video: ${videoResponse.status} ${videoResponse.statusText}`);
         }
         
         const videoBlob = await videoResponse.blob();
+        console.log("Video blob size:", videoBlob.size);
+        
+        if (videoBlob.size === 0) {
+          console.error("Downloaded video blob is empty");
+          throw new Error("Downloaded video from ElevenLabs is empty");
+        }
         
         // Upload to Supabase storage
-        const { error: uploadError } = await supabaseClient
+        console.log(`Attempting to upload video file to podcasts/${projectId}/video.mp4`);
+        const { error: uploadError, data: uploadData } = await supabaseClient
           .storage
           .from('podcasts')
           .upload(`${projectId}/video.mp4`, videoBlob, {
@@ -521,21 +530,52 @@ serve(async (req: Request) => {
           });
           
         if (uploadError) {
+          console.error("Error uploading video:", uploadError);
           throw new Error(`Error uploading video: ${uploadError.message}`);
         }
         
-        console.log("Successfully uploaded video for project:", projectId);
+        console.log("Successfully uploaded video for project:", projectId, uploadData);
         
-        // Make the file publicly accessible
-        const { data: publicUrlData, error: publicUrlError } = await supabaseClient
+        // Make the files publicly accessible
+        const { data: videoPublicUrlData, error: videoPublicUrlError } = await supabaseClient
           .storage
           .from('podcasts')
           .getPublicUrl(`${projectId}/video.mp4`);
           
-        if (publicUrlError) {
-          console.error("Error getting public URL:", publicUrlError);
+        if (videoPublicUrlError) {
+          console.error("Error getting public URL for video:", videoPublicUrlError);
         } else {
-          console.log("Public URL for video:", publicUrlData.publicUrl);
+          console.log("Public URL for video:", videoPublicUrlData.publicUrl);
+        }
+        
+        const { data: audioPublicUrlData, error: audioPublicUrlError } = await supabaseClient
+          .storage
+          .from('podcasts')
+          .getPublicUrl(`${projectId}/audio.mp3`);
+          
+        if (audioPublicUrlError) {
+          console.error("Error getting public URL for audio:", audioPublicUrlError);
+        } else {
+          console.log("Public URL for audio:", audioPublicUrlData.publicUrl);
+        }
+        
+        // Verify the files exist and are accessible
+        try {
+          const videoCheckResponse = await fetch(videoPublicUrlData.publicUrl, { method: 'HEAD' });
+          console.log("Video file check:", videoCheckResponse.status, videoCheckResponse.ok);
+          
+          const audioCheckResponse = await fetch(audioPublicUrlData.publicUrl, { method: 'HEAD' });
+          console.log("Audio file check:", audioCheckResponse.status, audioCheckResponse.ok);
+          
+          if (!videoCheckResponse.ok) {
+            console.error("Video file not accessible after upload");
+          }
+          
+          if (!audioCheckResponse.ok) {
+            console.error("Audio file not accessible after upload");
+          }
+        } catch (checkError) {
+          console.error("Error checking uploaded files:", checkError);
         }
         
         // After processing is complete, update the project
@@ -564,11 +604,13 @@ serve(async (req: Request) => {
               updated_at: new Date().toISOString()
             })
             .eq('id', projectId);
+            
+          console.error("Project status rolled back to draft due to error:", error.message);
         } catch (rollbackError) {
           console.error("Error rolling back project status:", rollbackError);
         }
       }
-    }, 1000); // Reduced to 1 second for faster testing
+    }, 1000);
     
     return new Response(
       JSON.stringify({ 

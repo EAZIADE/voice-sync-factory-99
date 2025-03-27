@@ -240,12 +240,15 @@ const ProjectDetail = () => {
     );
   }
 
+  // Fix the URL construction by ensuring the Supabase URL is properly included
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cvfqcvytoobplgracobg.supabase.co';
+  
   const videoUrl = (project?.status === 'completed' && project?.id)
-    ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/podcasts/${project.id}/video.mp4` 
+    ? `${supabaseUrl}/storage/v1/object/public/podcasts/${project.id}/video.mp4` 
     : undefined;
   
   const audioUrl = (project?.status === 'completed' && project?.id)
-    ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/podcasts/${project.id}/audio.mp3` 
+    ? `${supabaseUrl}/storage/v1/object/public/podcasts/${project.id}/audio.mp3` 
     : undefined;
   
   console.log("Video URL:", videoUrl);
