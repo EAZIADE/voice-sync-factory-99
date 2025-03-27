@@ -1,6 +1,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { asType } from "@/utils/typeUtils";
 
 /**
  * Processes different content source types into usable text for podcast generation
@@ -149,7 +150,7 @@ export const uploadAndProcessFile = async (file: File, userId: string): Promise<
     }
     
     return data.text;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error processing file:", error);
     toast.error(`Error processing file: ${error.message}`);
     return `[File processing error: ${error.message}]`;
@@ -182,7 +183,7 @@ export const processContentSource = async (source: ContentSource, userId: string
       default:
         throw new Error(`Unsupported content source type: ${source.type}`);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error processing content source:", error);
     toast.error(`Error processing content: ${error.message}`);
     return `Error processing content: ${error.message}`;

@@ -58,8 +58,8 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
         .update({ 
           script: processedContent,
           updated_at: new Date().toISOString()
-        })
-        .eq('id', project.id);
+        } as any)
+        .eq('id', project.id as any);
         
       if (error) {
         throw error;

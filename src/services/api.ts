@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { Host, Template, Language, Project, ElevenLabsApiKey } from "@/types";
 import { Database } from "@/integrations/supabase/type-extensions";
@@ -13,7 +14,7 @@ export const fetchHosts = async (): Promise<Host[]> => {
     throw error;
   }
   
-  return data || [];
+  return (data || []) as Host[];
 };
 
 // Template related API calls
@@ -27,7 +28,7 @@ export const fetchTemplates = async (): Promise<Template[]> => {
     throw error;
   }
   
-  return data || [];
+  return (data || []) as Template[];
 };
 
 // Language related API calls
@@ -42,9 +43,9 @@ export const fetchLanguages = async (): Promise<Language[]> => {
   }
   
   return (data || []).map(language => ({
-    ...language,
-    flag: getLanguageFlag(language.code),
-    popular: ['en', 'es', 'fr', 'de', 'zh', 'ja'].includes(language.code)
+    ...language as any,
+    flag: getLanguageFlag(language?.code || ''),
+    popular: ['en', 'es', 'fr', 'de', 'zh', 'ja'].includes(language?.code || '')
   }));
 };
 
@@ -53,7 +54,7 @@ export const fetchUserProjects = async (userId: string): Promise<Project[]> => {
   const { data, error } = await supabase
     .from('projects')
     .select('*')
-    .eq('user_id', userId);
+    .eq('user_id', userId as any);
   
   if (error) {
     console.error('Error fetching user projects:', error);
@@ -61,15 +62,15 @@ export const fetchUserProjects = async (userId: string): Promise<Project[]> => {
   }
   
   return (data || []).map(project => ({
-    ...project,
-    status: ensureValidStatus(project.status)
+    ...project as any,
+    status: ensureValidStatus(project?.status || 'draft')
   }));
 };
 
 export const createProject = async (project: Omit<Project, 'id' | 'created_at' | 'updated_at'>): Promise<Project> => {
   const { data, error } = await supabase
     .from('projects')
-    .insert([project])
+    .insert([project as any])
     .select()
     .single();
   
@@ -79,16 +80,16 @@ export const createProject = async (project: Omit<Project, 'id' | 'created_at' |
   }
   
   return {
-    ...data,
-    status: ensureValidStatus(data.status)
+    ...data as any,
+    status: ensureValidStatus(data?.status || 'draft')
   };
 };
 
 export const updateProject = async (id: string, updates: Partial<Project>): Promise<Project> => {
   const { data, error } = await supabase
     .from('projects')
-    .update(updates)
-    .eq('id', id)
+    .update(updates as any)
+    .eq('id', id as any)
     .select()
     .single();
   
@@ -98,8 +99,8 @@ export const updateProject = async (id: string, updates: Partial<Project>): Prom
   }
   
   return {
-    ...data,
-    status: ensureValidStatus(data.status)
+    ...data as any,
+    status: ensureValidStatus(data?.status || 'draft')
   };
 };
 
@@ -121,7 +122,7 @@ export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabs
     const { data, error } = await supabase
       .from('elevenlabs_api_keys')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', userId as any)
       .order('is_active', { ascending: false })
       .order('created_at', { ascending: false });
     
@@ -130,7 +131,7 @@ export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabs
       throw error;
     }
     
-    return data as ElevenLabsApiKey[];
+    return (data || []) as ElevenLabsApiKey[];
   } catch (error) {
     console.error('Error in fetchElevenLabsApiKeys:', error);
     return [];
@@ -146,7 +147,7 @@ export const addElevenLabsApiKey = async (keyData: Omit<ElevenLabsApiKey, 'id' |
   
   const { data, error } = await supabase
     .from('elevenlabs_api_keys')
-    .insert([keyData])
+    .insert([keyData as any])
     .select('*')
     .single();
   
@@ -161,8 +162,8 @@ export const addElevenLabsApiKey = async (keyData: Omit<ElevenLabsApiKey, 'id' |
 export const updateElevenLabsApiKey = async (id: string, updates: Partial<ElevenLabsApiKey>): Promise<ElevenLabsApiKey> => {
   const { data, error } = await supabase
     .from('elevenlabs_api_keys')
-    .update(updates)
-    .eq('id', id)
+    .update(updates as any)
+    .eq('id', id as any)
     .select('*')
     .single();
   
@@ -178,7 +179,7 @@ export const deleteElevenLabsApiKey = async (id: string): Promise<void> => {
   const { error } = await supabase
     .from('elevenlabs_api_keys')
     .delete()
-    .eq('id', id);
+    .eq('id', id as any);
   
   if (error) {
     console.error('Error deleting ElevenLabs API key:', error);

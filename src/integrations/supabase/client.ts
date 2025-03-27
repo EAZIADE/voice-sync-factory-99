@@ -30,14 +30,6 @@ export const supabase = createClient<Database>(
       params: {
         eventsPerSecond: 10
       }
-    },
-    storage: {
-      // Disable retries to avoid request duplication
-      retryLimit: 0,
-      // Set cache control value for files
-      storageHeadersForGetPublicUrl: {
-        'cache-control': 'max-age=3600'
-      }
     }
   }
 );

@@ -31,17 +31,17 @@ const ProjectDetail = () => {
         const { data, error } = await supabase
           .from('projects')
           .select('*')
-          .eq('id', id)
-          .eq('user_id', user.id)
+          .eq('id', id as any)
+          .eq('user_id', user.id as any)
           .single();
           
         if (error) throw error;
         
         if (data) {
           setProject({
-            ...data,
-            status: data.status === 'draft' || data.status === 'processing' || data.status === 'completed' 
-              ? data.status 
+            ...(data as any),
+            status: (data as any).status === 'draft' || (data as any).status === 'processing' || (data as any).status === 'completed' 
+              ? (data as any).status 
               : 'draft'
           });
         }
@@ -91,20 +91,20 @@ const ProjectDetail = () => {
         const { data, error } = await supabase
           .from('projects')
           .select('status, updated_at')
-          .eq('id', id)
+          .eq('id', id as any)
           .single();
           
         if (error) throw error;
         
-        if (data && data.status !== project.status) {
+        if (data && (data as any).status !== project.status) {
           const validStatus: 'draft' | 'processing' | 'completed' = 
-            data.status === 'draft' || data.status === 'processing' || data.status === 'completed' 
-              ? data.status 
+            (data as any).status === 'draft' || (data as any).status === 'processing' || (data as any).status === 'completed' 
+              ? (data as any).status 
               : 'draft';
               
-          setProject(prev => prev ? { ...prev, status: validStatus, updated_at: data.updated_at } : null);
+          setProject(prev => prev ? { ...prev, status: validStatus, updated_at: (data as any).updated_at } : null);
           
-          if (data.status === 'completed') {
+          if ((data as any).status === 'completed') {
             hookToast({
               title: "Success!",
               description: "Your AI podcast has been generated using Google's NotebookLM, Studio, and Gemini technology.",
