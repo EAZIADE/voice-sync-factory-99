@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Project } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { CharacterControlState } from "./CharacterControls";
@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import CharacterControls from "./CharacterControls";
 import ContentSourceInput from "./ContentSourceInput";
 import { toast } from "sonner";
+import { fetchElevenLabsApiKeys } from "@/services/api";
 
 interface ProjectGeneratorProps {
   project: Project;
@@ -34,7 +35,25 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
     autoGestures: true,
     eyeContact: true,
   });
+  const [hasActiveApiKey, setHasActiveApiKey] = useState(false);
   const { toast: hookToast } = useToast();
+
+  useEffect(() => {
+    // Check if user has active ElevenLabs API key
+    const checkApiKey = async () => {
+      if (!user) return;
+      
+      try {
+        const keys = await fetchElevenLabsApiKeys(user.id);
+        const hasKey = keys.some(key => key.is_active && key.quota_remaining > 0);
+        setHasActiveApiKey(hasKey);
+      } catch (error) {
+        console.error("Error checking API key:", error);
+      }
+    };
+    
+    checkApiKey();
+  }, [user]);
 
   const handleSourceSelected = async (source: ContentSource) => {
     try {
@@ -82,6 +101,13 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
     if (!user || !session || !project.id) {
       toast.error("Not authenticated", {
         description: "Please log in to generate a podcast"
+      });
+      return;
+    }
+
+    if (!hasActiveApiKey) {
+      toast.error("API Key Required", {
+        description: "Please add a valid ElevenLabs API key with available character quota in your dashboard settings."
       });
       return;
     }
@@ -201,7 +227,7 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
         <button
           className="w-full bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl disabled:opacity-70 disabled:cursor-not-allowed"
           onClick={handleGeneratePodcast}
-          disabled={isGenerating || !project.script}
+          disabled={isGenerating || !project.script || !hasActiveApiKey}
         >
           {isGenerating ? (
             <div className="flex items-center justify-center">
@@ -211,10 +237,18 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
               </svg>
               Generating your AI podcast...
             </div>
+          ) : !hasActiveApiKey ? (
+            "Add ElevenLabs API Key to Generate Podcast"
           ) : (
             "Generate AI Podcast"
           )}
         </button>
+        
+        {!hasActiveApiKey && (
+          <p className="text-sm text-amber-500 mt-2 text-center">
+            You need to add a valid ElevenLabs API key with available character quota in your dashboard settings.
+          </p>
+        )}
       </div>
     </div>
   );

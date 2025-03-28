@@ -1,20 +1,42 @@
 
 import React, { useEffect, useState } from "react";
-import { Navigate, Link } from "react-router-dom";
+import { Navigate, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { GlassPanel, GlassCard } from "@/components/ui/GlassMorphism";
 import { AnimatedButton } from "@/components/ui/AnimatedButton";
 import { Project } from "@/types";
-import { fetchProjects } from "@/services/api";
+import { fetchProjects, deleteProject } from "@/services/api";
 import Header from "@/components/Header";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import ElevenLabsKeyManager from "@/components/ElevenLabsKeyManager";
+import { 
+  DropdownMenu, 
+  DropdownMenuTrigger, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuSeparator 
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal, Pencil, Trash2, Eye } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 const Dashboard = () => {
   const { user, loading } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { toast } = useToast();
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const { toast: hookToast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -26,7 +48,7 @@ const Dashboard = () => {
         setProjects(data);
       } catch (error) {
         console.error("Error loading projects:", error);
-        toast({
+        hookToast({
           title: "Error",
           description: "Failed to load your projects. Please try again.",
           variant: "destructive"
@@ -39,7 +61,7 @@ const Dashboard = () => {
     if (user) {
       loadProjects();
     }
-  }, [user, toast]);
+  }, [user, hookToast]);
 
   // Redirect if not logged in
   if (!loading && !user) {
@@ -57,6 +79,32 @@ const Dashboard = () => {
       default: 
         return "bg-secondary/50 text-foreground";
     }
+  };
+  
+  const handleDeleteConfirm = async () => {
+    if (!projectToDelete || !projectToDelete.id) return;
+    
+    try {
+      await deleteProject(projectToDelete.id);
+      
+      setProjects(projects.filter(p => p.id !== projectToDelete.id));
+      
+      toast.success("Project deleted", {
+        description: "Your project has been permanently deleted."
+      });
+    } catch (error) {
+      console.error("Error deleting project:", error);
+      
+      toast.error("Delete failed", {
+        description: "Could not delete the project. Please try again."
+      });
+    } finally {
+      setProjectToDelete(null);
+    }
+  };
+  
+  const handleEditProject = (project: Project) => {
+    navigate(`/project/${project.id}`);
   };
 
   return (
@@ -101,11 +149,48 @@ const Dashboard = () => {
                   <div className="p-6">
                     <div className="flex justify-between items-start mb-3">
                       <h3 className="font-semibold text-lg">{project.title}</h3>
-                      <span 
-                        className={`px-2 py-1 rounded-full text-xs ${statusBadgeClass(project.status)}`}
-                      >
-                        {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        <span 
+                          className={`px-2 py-1 rounded-full text-xs ${statusBadgeClass(project.status)}`}
+                        >
+                          {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+                        </span>
+                        
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="p-1 rounded-full hover:bg-secondary/20 transition-colors">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem 
+                              className="cursor-pointer flex items-center gap-2"
+                              onClick={() => navigate(`/project/${project.id}`)}
+                            >
+                              <Eye className="h-4 w-4" />
+                              <span>View</span>
+                            </DropdownMenuItem>
+                            
+                            <DropdownMenuItem 
+                              className="cursor-pointer flex items-center gap-2"
+                              onClick={() => handleEditProject(project)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                              <span>Edit</span>
+                            </DropdownMenuItem>
+                            
+                            <DropdownMenuSeparator />
+                            
+                            <DropdownMenuItem 
+                              className="cursor-pointer text-destructive flex items-center gap-2"
+                              onClick={() => setProjectToDelete(project)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span>Delete</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                     
                     <p className="text-muted-foreground text-sm mb-4 line-clamp-2">
@@ -142,6 +227,25 @@ const Dashboard = () => {
           </div>
         </div>
       </main>
+      
+      {/* Delete Project Confirmation Dialog */}
+      <AlertDialog open={!!projectToDelete} onOpenChange={(open) => !open && setProjectToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{projectToDelete?.title}"? This action cannot be undone
+              and will permanently remove the project and all associated media files.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
