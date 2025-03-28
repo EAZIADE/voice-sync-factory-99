@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { 
@@ -15,7 +14,7 @@ import { AnimatedButton } from "@/components/ui/AnimatedButton";
 import { Input } from "@/components/ui/input";
 import { useForm } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, CheckCircle, AlertCircle, Edit, Save, X, Database, HardDrive } from "lucide-react";
+import { Trash2, CheckCircle, AlertCircle, Edit, Save, X, Database, HardDrive, Cloud } from "lucide-react";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import * as z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -122,8 +121,8 @@ const ElevenLabsKeyManager = () => {
     try {
       await updateElevenLabsApiKey(key.id!, {
         is_active: !key.is_active,
-        user_id: user.id, // Add user_id for local storage handling
-        is_local: key.is_local // Preserve local flag
+        user_id: user.id,
+        is_local: key.is_local
       });
       
       toast({
@@ -146,7 +145,7 @@ const ElevenLabsKeyManager = () => {
     if (!user || !key.id) return;
     
     try {
-      await deleteElevenLabsApiKey(key.id, user.id); // Pass user.id for local storage handling
+      await deleteElevenLabsApiKey(key.id, user.id);
       
       toast({
         title: "Success",
@@ -195,8 +194,8 @@ const ElevenLabsKeyManager = () => {
       await updateElevenLabsApiKey(editingKeyId, {
         key: values.key,
         name: values.name,
-        user_id: user.id, // Add user_id for local storage handling
-        is_local: currentKey?.is_local // Preserve local flag
+        user_id: user.id,
+        is_local: currentKey?.is_local
       });
       
       toast({
@@ -363,10 +362,15 @@ const ElevenLabsKeyManager = () => {
                           <Badge variant={key.is_active ? "success" : "secondary"}>
                             {key.is_active ? "Active" : "Inactive"}
                           </Badge>
-                          {key.is_local && (
+                          {key.is_local ? (
                             <Badge variant="outline" className="flex items-center gap-1">
                               <HardDrive className="h-3 w-3" />
                               Local
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="flex items-center gap-1 bg-blue-50">
+                              <Cloud className="h-3 w-3" />
+                              Database
                             </Badge>
                           )}
                         </div>
@@ -434,10 +438,9 @@ const ElevenLabsKeyManager = () => {
               <Database className="h-5 w-5" />
             </div>
             <div>
-              <h4 className="font-medium text-blue-600">Using local storage</h4>
+              <h4 className="font-medium text-blue-600">Storage information</h4>
               <p className="text-sm text-muted-foreground mt-1">
-                Your API keys are being stored in your browser's local storage since Supabase connection is not available. 
-                Keys will only be available on this device and browser.
+                Your API keys are now stored securely in the database. Any local keys will be automatically migrated to the database when loaded.
               </p>
             </div>
           </div>

@@ -178,13 +178,69 @@ export const deleteProject = async (projectId: string): Promise<void> => {
 // Fetch ElevenLabs API keys for a user
 export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabsApiKey[]> => {
   try {
-    // Since eleven_labs_api_keys doesn't exist yet in the database schema, 
-    // we'll just return local storage keys
-    console.warn("Fetching from local storage only since eleven_labs_api_keys table doesn't exist yet");
-    return getLocalElevenLabsKeys(userId);
+    // Try to fetch keys from the database first
+    const { data, error } = await supabase
+      .from('eleven_labs_api_keys')
+      .select('*')
+      .eq('user_id', userId);
+      
+    if (error) {
+      console.error("Error fetching ElevenLabs API keys from database:", error);
+      
+      // Fall back to local storage if database fails
+      console.warn("Falling back to local storage for API keys");
+      return getLocalElevenLabsKeys(userId);
+    }
+    
+    if (data && data.length > 0) {
+      return data.map(key => ({
+        ...key,
+        is_local: false
+      }));
+    }
+    
+    // If no keys in database, check local storage
+    const localKeys = getLocalElevenLabsKeys(userId);
+    
+    // If we have local keys, migrate them to the database
+    if (localKeys.length > 0) {
+      console.log("Migrating local keys to database");
+      for (const key of localKeys) {
+        try {
+          await addElevenLabsApiKey({
+            key: key.key,
+            name: key.name,
+            is_active: key.is_active,
+            user_id: userId,
+            quota_remaining: key.quota_remaining,
+            last_used: key.last_used
+          });
+        } catch (migrationError) {
+          console.error("Error migrating key to database:", migrationError);
+        }
+      }
+      
+      // After migration, fetch again from the database
+      const { data: migratedData, error: migratedError } = await supabase
+        .from('eleven_labs_api_keys')
+        .select('*')
+        .eq('user_id', userId);
+        
+      if (migratedError) {
+        console.error("Error fetching migrated ElevenLabs API keys:", migratedError);
+        return localKeys; 
+      }
+      
+      return migratedData.map(key => ({
+        ...key,
+        is_local: false
+      })) || [];
+    }
+    
+    return [];
   } catch (error) {
     console.error("Error fetching ElevenLabs API keys:", error);
-    // Fall back to local storage
+    // Fall back to local storage in case of any error
     return getLocalElevenLabsKeys(userId);
   }
 };
@@ -223,8 +279,47 @@ export const addElevenLabsApiKey = async (apiKey: Omit<ElevenLabsApiKey, 'id'>):
   try {
     console.log("Adding ElevenLabs API key:", apiKey.key?.substring(0, 8) + "...");
     
-    // Since eleven_labs_api_keys table doesn't exist yet, save to local storage
-    console.warn("Saving to local storage since eleven_labs_api_keys table doesn't exist yet");
+    // Try to insert into the database
+    const { data, error } = await supabase
+      .from('eleven_labs_api_keys')
+      .insert({
+        key: apiKey.key,
+        name: apiKey.name,
+        is_active: apiKey.is_active || true,
+        user_id: apiKey.user_id,
+        quota_remaining: apiKey.quota_remaining,
+        last_used: apiKey.last_used,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+      
+    if (error) {
+      console.error("Error adding ElevenLabs API key to database:", error);
+      // Fall back to local storage
+      console.warn("Falling back to local storage for adding API key");
+      return saveLocalElevenLabsKey(apiKey.user_id, {
+        key: apiKey.key,
+        name: apiKey.name,
+        is_active: apiKey.is_active || true,
+        user_id: apiKey.user_id,
+        quota_remaining: apiKey.quota_remaining,
+        last_used: apiKey.last_used
+      });
+    }
+    
+    return {
+      ...data,
+      is_local: false
+    };
+  } catch (error) {
+    console.error("Error adding ElevenLabs API key:", error);
+    // Fall back to local storage
+    if (!apiKey.user_id) {
+      throw new Error("User ID is required to add API key");
+    }
+    
     return saveLocalElevenLabsKey(apiKey.user_id, {
       key: apiKey.key,
       name: apiKey.name,
@@ -233,40 +328,88 @@ export const addElevenLabsApiKey = async (apiKey: Omit<ElevenLabsApiKey, 'id'>):
       quota_remaining: apiKey.quota_remaining,
       last_used: apiKey.last_used
     });
-    
-  } catch (error) {
-    console.error("Error adding ElevenLabs API key:", error);
-    throw error;
   }
 };
 
 // Update an ElevenLabs API key
 export const updateElevenLabsApiKey = async (keyId: string, updates: Partial<ElevenLabsApiKey>): Promise<ElevenLabsApiKey> => {
   try {
-    // Since the table doesn't exist yet, update in local storage
+    // Check if it's a local key by looking for is_local flag
+    if (updates.is_local) {
+      console.log("Updating local key:", keyId);
+      if (!updates.user_id) {
+        throw new Error("User ID is required to update local key");
+      }
+      
+      return updateLocalElevenLabsKey(updates.user_id, keyId, updates);
+    }
+    
+    // Update in database
+    const { data, error } = await supabase
+      .from('eleven_labs_api_keys')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', keyId)
+      .select()
+      .single();
+      
+    if (error) {
+      console.error("Error updating ElevenLabs API key in database:", error);
+      
+      // Fall back to local storage if database fails
+      if (!updates.user_id) {
+        throw new Error("User ID is required to update local key");
+      }
+      
+      return updateLocalElevenLabsKey(updates.user_id, keyId, updates);
+    }
+    
+    return {
+      ...data,
+      is_local: false
+    };
+  } catch (error) {
+    console.error("Error updating ElevenLabs API key:", error);
+    
+    // Fall back to local storage
     if (!updates.user_id) {
-      throw new Error("User ID is required to update local key");
+      throw new Error("User ID is required to update key");
     }
     
     return updateLocalElevenLabsKey(updates.user_id, keyId, updates);
-  } catch (error) {
-    console.error("Error updating ElevenLabs API key:", error);
-    throw error;
   }
 };
 
 // Delete an ElevenLabs API key
 export const deleteElevenLabsApiKey = async (keyId: string, userId?: string): Promise<void> => {
   try {
-    // If userId is provided, delete from local storage
-    if (userId) {
-      deleteLocalElevenLabsKey(userId, keyId);
-      return;
-    } else {
-      throw new Error("User ID is required to delete a key");
+    // Try to delete from database first
+    const { error } = await supabase
+      .from('eleven_labs_api_keys')
+      .delete()
+      .eq('id', keyId);
+      
+    if (error) {
+      console.error("Error deleting ElevenLabs API key from database:", error);
+      
+      // If userId is provided, try to delete from local storage
+      if (userId) {
+        deleteLocalElevenLabsKey(userId, keyId);
+        return;
+      } else {
+        throw new Error("Failed to delete API key from database and no user ID provided for local fallback");
+      }
     }
   } catch (error) {
     console.error("Error deleting ElevenLabs API key:", error);
-    throw error;
+    
+    // If userId is provided, try to delete from local storage
+    if (userId) {
+      deleteLocalElevenLabsKey(userId, keyId);
+    } else {
+      throw new Error("User ID is required to delete a key");
+    }
   }
 };

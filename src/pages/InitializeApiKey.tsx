@@ -5,10 +5,11 @@ import { fetchElevenLabsApiKeys } from "@/services/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import ElevenLabsKeyManager from "@/components/ElevenLabsKeyManager";
 import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 const InitializeApiKey = () => {
   const { user } = useAuth();
-  const { toast } = useToast();
+  const { toast: hookToast } = useToast();
   const [showDialog, setShowDialog] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [hasApiKey, setHasApiKey] = useState(false);
@@ -31,10 +32,8 @@ const InitializeApiKey = () => {
         
         // Don't show the dialog on error if we're still checking
         // Instead, show a toast notification
-        toast({
-          title: "Connection Issue",
-          description: "Could not connect to Supabase. API keys will be stored locally.",
-          variant: "destructive"
+        toast.error("Connection Issue", {
+          description: "Could not connect to the database. Please try again later."
         });
         
         setShowDialog(false);
@@ -48,7 +47,7 @@ const InitializeApiKey = () => {
     } else {
       setIsInitializing(false);
     }
-  }, [user, toast]);
+  }, [user]);
 
   if (isInitializing || !user) {
     return null;
