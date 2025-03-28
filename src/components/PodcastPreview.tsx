@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { GlassCard, GlassPanel } from "./ui/GlassMorphism";
 import { AnimatedButton } from "./ui/AnimatedButton";
@@ -62,7 +61,6 @@ const PodcastPreview = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   
-  // Reliable demo media URLs that will definitely work
   const demoVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-business-woman-talking-4796-large.mp4";
   const demoAudioUrl = "https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3";
   
@@ -83,13 +81,11 @@ const PodcastPreview = ({
     checkAuth();
   }, []);
 
-  // Always use the demo media for draft and processing stages
   const videoSource = status === 'completed' && previewUrl ? 
     (localMediaUrls.video || previewUrl) : demoVideoUrl;
   const audioSource = status === 'completed' && audioUrl ? 
     (localMediaUrls.audio || audioUrl) : demoAudioUrl;
   
-  // Reset errors when status changes
   useEffect(() => {
     setVideoError(null);
     setAudioError(null);
@@ -105,7 +101,6 @@ const PodcastPreview = ({
     }
   }, [status, previewUrl, audioUrl, localMediaUrls]);
 
-  // Load media for completed projects
   useEffect(() => {
     if (status !== 'completed' || !projectId) return;
     
@@ -115,7 +110,6 @@ const PodcastPreview = ({
       try {
         console.log(`Attempting to get media for project: ${projectId}`);
         
-        // Always use demo media as fallback first
         if (videoRef.current) {
           videoRef.current.src = demoVideoUrl;
           videoRef.current.load();
@@ -126,14 +120,12 @@ const PodcastPreview = ({
           audioRef.current.load();
         }
         
-        // Try to get actual media
         const videoBlob = await downloadMediaBlob(projectId, 'video');
         if (videoBlob) {
           const videoUrl = URL.createObjectURL(videoBlob);
           console.log("Created local video URL from blob:", videoUrl);
           setLocalMediaUrls(prev => ({ ...prev, video: videoUrl }));
         } else {
-          // Try signed URL as fallback
           const signedVideoUrl = await getSignedUrl(projectId, 'video');
           if (signedVideoUrl) {
             console.log("Got signed video URL:", signedVideoUrl);
@@ -163,7 +155,6 @@ const PodcastPreview = ({
     loadMediaForProject();
   }, [status, projectId, demoVideoUrl, demoAudioUrl]);
 
-  // Handle media playback
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
@@ -176,7 +167,6 @@ const PodcastPreview = ({
             console.error("Error playing video:", err);
             setVideoError(`Error playing video: ${err instanceof Error ? err.message : 'Unknown error'}`);
             
-            // Always fall back to demo video
             if (videoRef.current) {
               videoRef.current.src = demoVideoUrl;
               videoRef.current.load();
@@ -195,7 +185,6 @@ const PodcastPreview = ({
             console.error("Error playing audio:", err);
             setAudioError(`Error playing audio: ${err instanceof Error ? err.message : 'Unknown error'}`);
             
-            // Always fall back to demo audio
             if (audioRef.current) {
               audioRef.current.src = demoAudioUrl;
               audioRef.current.load();
@@ -238,7 +227,6 @@ const PodcastPreview = ({
     };
   }, [isPlaying, mediaType, demoVideoUrl, demoAudioUrl]);
 
-  // Media event handlers
   useEffect(() => {
     const handleLoadedMetadata = (e: Event) => {
       const target = e.target as HTMLMediaElement;
@@ -258,7 +246,6 @@ const PodcastPreview = ({
       if (mediaType === 'video') {
         setVideoError(`Video error (${errorCode}): ${errorMessage}`);
         
-        // Always fall back to demo video
         if (videoRef.current) {
           videoRef.current.src = demoVideoUrl;
           videoRef.current.load();
@@ -266,7 +253,6 @@ const PodcastPreview = ({
       } else {
         setAudioError(`Audio error (${errorCode}): ${errorMessage}`);
         
-        // Always fall back to demo audio
         if (audioRef.current) {
           audioRef.current.src = demoAudioUrl;
           audioRef.current.load();
@@ -275,10 +261,8 @@ const PodcastPreview = ({
       
       setIsPlaying(false);
       
-      toast({
-        title: `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} Playback Error`,
-        description: "Format error. Using built-in demo media.",
-        variant: "destructive"
+      toast.error(`${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} Playback Error`, {
+        description: "Format error. Using built-in demo media."
       });
     };
     
@@ -321,7 +305,6 @@ const PodcastPreview = ({
     };
   }, [mediaType, demoVideoUrl, demoAudioUrl]);
 
-  // UI event handlers
   const togglePlayback = () => {
     setIsPlaying(!isPlaying);
   };
@@ -360,24 +343,19 @@ const PodcastPreview = ({
   
   const handleDownload = async () => {
     if (status !== 'completed') {
-      hookToast({
-        title: "Podcast not ready",
-        description: "Please generate the podcast first before downloading.",
-        variant: "destructive"
+      toast.error("Podcast not ready", {
+        description: "Please generate the podcast first before downloading."
       });
       return;
     }
     
     if (!projectId) {
-      hookToast({
-        title: "Project ID missing",
-        description: "Cannot download without a valid project ID.",
-        variant: "destructive"
+      toast.error("Project ID missing", {
+        description: "Cannot download without a valid project ID."
       });
       return;
     }
     
-    // Refresh session if needed
     const isValid = await isSessionValid();
     if (!isValid) {
       const refreshed = await refreshSession();
@@ -396,7 +374,6 @@ const PodcastPreview = ({
     });
     
     try {
-      // First try to use local blob URLs if available
       if (mediaType === 'video' && localMediaUrls.video && localMediaUrls.video.startsWith('blob:')) {
         const a = document.createElement('a');
         a.href = localMediaUrls.video;
@@ -431,7 +408,6 @@ const PodcastPreview = ({
         return;
       }
       
-      // Fall back to server download
       const result = await downloadMediaFile(projectId, mediaType);
       
       if (!result.success) {
@@ -496,7 +472,6 @@ const PodcastPreview = ({
     }
   };
   
-  // Force reload media
   const handleReloadMedia = async () => {
     if (!projectId || status !== 'completed') return;
     
@@ -505,7 +480,6 @@ const PodcastPreview = ({
     setAudioError(null);
     setLoadAttempts(0);
     
-    // Clear existing object URLs to prevent memory leaks
     if (localMediaUrls.video && localMediaUrls.video.startsWith('blob:')) {
       URL.revokeObjectURL(localMediaUrls.video);
     }
@@ -519,7 +493,6 @@ const PodcastPreview = ({
       description: "Attempting to reload podcast files from server..."
     });
     
-    // Set demo media immediately for a better user experience
     if (videoRef.current) {
       videoRef.current.src = demoVideoUrl;
       videoRef.current.load();
@@ -533,7 +506,6 @@ const PodcastPreview = ({
     setIsMediaLoading(true);
     
     try {
-      // Attempt to download media blobs directly
       const videoBlob = await downloadMediaBlob(projectId, 'video');
       const audioBlob = await downloadMediaBlob(projectId, 'audio');
       
@@ -585,7 +557,7 @@ const PodcastPreview = ({
                 <video 
                   ref={videoRef}
                   className="w-full h-full object-cover"
-                  src={demoVideoUrl} // Always default to demo video first
+                  src={demoVideoUrl}
                   controls={false}
                   playsInline
                   preload="metadata"
@@ -605,7 +577,7 @@ const PodcastPreview = ({
                   </div>
                   <audio 
                     ref={audioRef}
-                    src={demoAudioUrl} // Always default to demo audio first
+                    src={demoAudioUrl}
                     preload="metadata"
                     onEnded={() => setIsPlaying(false)}
                     className="hidden"
@@ -628,8 +600,7 @@ const PodcastPreview = ({
                     ) : generationError ? (
                       <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
                         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                        <line x1="12" y1="9" x2="12" y2="13"></line>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        <line x1="5" y1="19" x2="5" y2="5"></line>
                       </svg>
                     ) : (
                       <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
