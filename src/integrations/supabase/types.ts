@@ -14,6 +14,7 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          is_local: boolean | null
           key: string
           last_used: string | null
           name: string
@@ -25,6 +26,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          is_local?: boolean | null
           key: string
           last_used?: string | null
           name: string
@@ -36,6 +38,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          is_local?: boolean | null
           key?: string
           last_used?: string | null
           name?: string

@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { ElevenLabsApiKey, Host, Language, Project, Template } from "@/types";
 import { 
@@ -266,8 +267,12 @@ export const validateElevenLabsApiKey = async (apiKey: string): Promise<{valid: 
     const data = await response.json();
     console.log("ElevenLabs API validation response:", data);
     
-    // Extract character quota information
-    const quota_remaining = data.character_count || 0;
+    // Extract character quota information - use the right property from the API response
+    const character_limit = data.character_limit || 0;
+    const character_count = data.character_count || 0;
+    const quota_remaining = Math.max(0, character_limit - character_count);
+    
+    console.log(`Character quota: ${quota_remaining} (limit: ${character_limit}, used: ${character_count})`);
     
     return { valid: true, quota_remaining };
   } catch (error) {
@@ -295,7 +300,8 @@ export const addElevenLabsApiKey = async (apiKey: Omit<ElevenLabsApiKey, 'id'>):
         quota_remaining: quota_remaining,
         last_used: apiKey.last_used,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        is_local: false
       } as any)
       .select()
       .single();
@@ -370,7 +376,8 @@ export const updateElevenLabsApiKey = async (keyId: string, updates: Partial<Ele
       .update({
         ...updates,
         quota_remaining,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        is_local: false
       } as any)
       .eq('id', keyId)
       .select()

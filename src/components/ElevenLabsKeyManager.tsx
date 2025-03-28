@@ -230,7 +230,8 @@ const ElevenLabsKeyManager = () => {
       
       await updateElevenLabsApiKey(key.id!, {
         user_id: user.id,
-        quota_remaining: quota_remaining
+        quota_remaining: quota_remaining,
+        is_local: key.is_local
       });
       
       toast({
@@ -250,7 +251,7 @@ const ElevenLabsKeyManager = () => {
   };
 
   const formatQuota = (quota?: number) => {
-    if (quota === undefined) return "Unknown";
+    if (quota === undefined || quota === null) return "Unknown";
     if (quota <= 0) return "Depleted";
     
     return quota.toLocaleString();
