@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { ElevenLabsApiKey, Host, Language, Project, Template } from "@/types";
 import { 
@@ -111,7 +112,7 @@ export const updateProject = async (
       template_id: templateId,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', id as any)
+    .eq('id', id)
     .select('*')
     .single();
 
@@ -130,7 +131,7 @@ export const fetchProjects = async (userId: string): Promise<Project[]> => {
   const { data, error } = await supabase
     .from('projects')
     .select('*')
-    .eq('user_id', userId as any)
+    .eq('user_id', userId)
     .order('updated_at', { ascending: false });
     
   if (error) {
@@ -149,8 +150,8 @@ export const fetchProject = async (projectId: string, userId: string): Promise<P
   const { data, error } = await supabase
     .from('projects')
     .select('*')
-    .eq('id', projectId as any)
-    .eq('user_id', userId as any)
+    .eq('id', projectId)
+    .eq('user_id', userId)
     .single();
     
   if (error) {
@@ -186,7 +187,7 @@ export const deleteProject = async (projectId: string): Promise<void> => {
     const { error } = await supabase
       .from('projects')
       .delete()
-      .eq('id', projectId as any);
+      .eq('id', projectId);
       
     if (error) {
       throw error;
@@ -202,9 +203,9 @@ export const deleteProject = async (projectId: string): Promise<void> => {
  */
 export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabsApiKey[]> => {
   const { data, error } = await supabase
-    .from('elevenlabs_api_keys')
+    .from('eleven_labs_api_keys')
     .select('*')
-    .eq('user_id', userId as any)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -218,7 +219,13 @@ export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabs
 /**
  * Add a new ElevenLabs API key for a user
  */
-export const addElevenLabsApiKey = async (userId: string, key: string): Promise<ElevenLabsApiKey> => {
+export const addElevenLabsApiKey = async (apiKeyData: {
+  user_id: string;
+  key: string;
+  name: string;
+  is_active: boolean;
+}): Promise<ElevenLabsApiKey> => {
+  const { key } = apiKeyData;
   const { valid, quota_remaining } = await validateElevenLabsApiKey(key);
   
   if (!valid) {
@@ -226,12 +233,13 @@ export const addElevenLabsApiKey = async (userId: string, key: string): Promise<
   }
   
   const { data, error } = await supabase
-    .from('elevenlabs_api_keys')
+    .from('eleven_labs_api_keys')
     .insert([
       {
-        user_id: userId,
-        key: key,
-        is_active: true,
+        user_id: apiKeyData.user_id,
+        key: apiKeyData.key,
+        name: apiKeyData.name,
+        is_active: apiKeyData.is_active,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         quota_remaining: quota_remaining
@@ -251,22 +259,40 @@ export const addElevenLabsApiKey = async (userId: string, key: string): Promise<
 /**
  * Update an existing ElevenLabs API key
  */
-export const updateElevenLabsApiKey = async (id: string, key: string, is_active: boolean): Promise<ElevenLabsApiKey> => {
-  const { valid, quota_remaining } = await validateElevenLabsApiKey(key);
+export const updateElevenLabsApiKey = async (
+  id: string, 
+  apiKeyData: {
+    user_id: string;
+    key?: string;
+    name?: string;
+    is_active?: boolean;
+    is_local?: boolean;
+    quota_remaining?: number;
+  }
+): Promise<ElevenLabsApiKey> => {
+  const updateData: Record<string, any> = {
+    updated_at: new Date().toISOString()
+  };
   
-  if (!valid) {
-    throw new Error('Invalid ElevenLabs API key');
+  // Only add defined fields to the update
+  if (apiKeyData.key !== undefined) {
+    const { valid, quota_remaining } = await validateElevenLabsApiKey(apiKeyData.key);
+    if (!valid) {
+      throw new Error('Invalid ElevenLabs API key');
+    }
+    updateData.key = apiKeyData.key;
+    updateData.quota_remaining = quota_remaining;
+  } else if (apiKeyData.quota_remaining !== undefined) {
+    updateData.quota_remaining = apiKeyData.quota_remaining;
   }
   
+  if (apiKeyData.name !== undefined) updateData.name = apiKeyData.name;
+  if (apiKeyData.is_active !== undefined) updateData.is_active = apiKeyData.is_active;
+  
   const { data, error } = await supabase
-    .from('elevenlabs_api_keys')
-    .update({
-      key: key,
-      is_active: is_active,
-      updated_at: new Date().toISOString(),
-      quota_remaining: quota_remaining
-    })
-    .eq('id', id as any)
+    .from('eleven_labs_api_keys')
+    .update(updateData)
+    .eq('id', id)
     .select('*')
     .single();
 
@@ -281,11 +307,12 @@ export const updateElevenLabsApiKey = async (id: string, key: string, is_active:
 /**
  * Delete an ElevenLabs API key
  */
-export const deleteElevenLabsApiKey = async (id: string): Promise<void> => {
+export const deleteElevenLabsApiKey = async (id: string, userId: string): Promise<void> => {
   const { error } = await supabase
-    .from('elevenlabs_api_keys')
+    .from('eleven_labs_api_keys')
     .delete()
-    .eq('id', id as any);
+    .eq('id', id)
+    .eq('user_id', userId);
 
   if (error) {
     console.error('Error deleting ElevenLabs API key:', error);
