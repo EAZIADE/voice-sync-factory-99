@@ -67,7 +67,13 @@ export const getMediaUrl = (projectId: string, fileType: 'audio' | 'video'): str
   // Force no caching with a unique timestamp for each request
   const timestamp = new Date().getTime();
   const { data } = supabase.storage.from('podcasts').getPublicUrl(`${path}?t=${timestamp}`);
-  return data.publicUrl;
+  
+  // Add cache-busting query parameter
+  const url = new URL(data.publicUrl);
+  url.searchParams.set('t', timestamp.toString());
+  
+  // Return the sanitized URL
+  return url.toString();
 };
 
 export const checkMediaFileExists = async (projectId: string, fileType: 'audio' | 'video'): Promise<boolean> => {
@@ -84,20 +90,19 @@ export const checkMediaFileExists = async (projectId: string, fileType: 'audio' 
     
     if (error) {
       console.error(`Error checking if ${fileType} file exists:`, error);
+      
       // Try a direct head request to see if the file exists
       try {
-        const { data: publicUrlData } = supabase.storage.from('podcasts').getPublicUrl(path);
-        if (publicUrlData && publicUrlData.publicUrl) {
-          const response = await fetch(publicUrlData.publicUrl, { 
-            method: 'HEAD',
-            cache: 'no-store',
-            headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache'
-            }
-          });
-          return response.ok;
-        }
+        const mediaUrl = getMediaUrl(projectId, fileType);
+        const response = await fetch(mediaUrl, { 
+          method: 'HEAD',
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        });
+        return response.ok;
       } catch (headError) {
         console.error(`Error checking file with HEAD request:`, headError);
       }
@@ -126,37 +131,32 @@ export const downloadMediaFile = async (projectId: string, fileType: 'audio' | '
     // Ensure the bucket exists
     await ensurePodcastsBucketExists();
     
-    // First try getting the public URL for direct access
-    const { data: publicUrlData } = supabase.storage.from('podcasts').getPublicUrl(path);
-    if (publicUrlData && publicUrlData.publicUrl) {
-      // Try a HEAD request first to validate the URL
-      try {
-        const headResponse = await fetch(publicUrlData.publicUrl, { 
-          method: 'HEAD',
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache'
-          }
-        });
-        
-        if (headResponse.ok) {
-          // Construct a sanitized URL with cache-busting query parameter
-          const url = new URL(publicUrlData.publicUrl);
-          url.searchParams.set('t', Date.now().toString());
-          
-          return {
-            success: true,
-            url: url.toString(),
-            message: 'Direct download URL available'
-          };
+    // Get the direct download URL
+    const mediaUrl = getMediaUrl(projectId, fileType);
+    
+    // Try a HEAD request first to validate the URL
+    try {
+      const headResponse = await fetch(mediaUrl, { 
+        method: 'HEAD',
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
         }
-      } catch (headError) {
-        console.warn("HEAD request to public URL failed:", headError);
+      });
+      
+      if (headResponse.ok) {
+        return {
+          success: true,
+          url: mediaUrl,
+          message: 'Direct download URL available'
+        };
       }
+    } catch (headError) {
+      console.warn("HEAD request to media URL failed:", headError);
     }
     
-    // If public URL didn't work, try direct download
+    // If direct URL didn't work, try direct download
     const { data, error } = await supabase.storage.from('podcasts').download(path);
     
     if (error) {
@@ -280,13 +280,19 @@ export const validateMediaFile = async (url: string, type: 'audio' | 'video'): P
       return false;
     }
     
-    // Check for appropriate content types
-    if (type === 'audio' && !contentType.includes('audio/')) {
+    // Broader content type checking to handle different server responses
+    if (type === 'audio' && 
+        !(contentType.includes('audio/') || 
+          contentType.includes('application/octet-stream') || 
+          contentType.includes('binary'))) {
       console.error(`Invalid content type for audio: ${contentType}`);
       return false;
     }
     
-    if (type === 'video' && !contentType.includes('video/')) {
+    if (type === 'video' && 
+        !(contentType.includes('video/') || 
+          contentType.includes('application/octet-stream') || 
+          contentType.includes('binary'))) {
       console.error(`Invalid content type for video: ${contentType}`);
       return false;
     }
@@ -295,5 +301,49 @@ export const validateMediaFile = async (url: string, type: 'audio' | 'video'): P
   } catch (error) {
     console.error(`Error validating ${type} file:`, error);
     return false;
+  }
+};
+
+// Function to get a signed URL for enhanced media access
+export const getSignedUrl = async (projectId: string, fileType: 'audio' | 'video'): Promise<string | null> => {
+  try {
+    const extension = fileType === 'audio' ? 'mp3' : 'mp4';
+    const path = `${projectId}/${fileType}.${extension}`;
+    
+    const { data, error } = await supabase.storage
+      .from('podcasts')
+      .createSignedUrl(path, 60); // 60 seconds validity
+      
+    if (error) {
+      console.error(`Error creating signed URL for ${fileType}:`, error);
+      return null;
+    }
+    
+    return data.signedUrl;
+  } catch (error) {
+    console.error(`Error getting signed URL for ${fileType}:`, error);
+    return null;
+  }
+};
+
+// Direct media blob download function
+export const downloadMediaBlob = async (projectId: string, fileType: 'audio' | 'video'): Promise<Blob | null> => {
+  try {
+    const extension = fileType === 'audio' ? 'mp3' : 'mp4';
+    const path = `${projectId}/${fileType}.${extension}`;
+    
+    const { data, error } = await supabase.storage
+      .from('podcasts')
+      .download(path);
+      
+    if (error) {
+      console.error(`Error downloading ${fileType} blob:`, error);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error(`Error downloading ${fileType} blob:`, error);
+    return null;
   }
 };
