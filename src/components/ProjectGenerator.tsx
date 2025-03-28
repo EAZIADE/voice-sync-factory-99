@@ -4,7 +4,7 @@ import { Project } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { CharacterControlState } from "./CharacterControls";
 import { ContentSource, processContentSource } from "@/utils/contentSourceProcessing";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, refreshSession } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import CharacterControls from "./CharacterControls";
 import ContentSourceInput from "./ContentSourceInput";
@@ -112,6 +112,23 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
       return;
     }
     
+    // Make sure the selected hosts are valid
+    if (!project.selected_hosts || project.selected_hosts.length === 0) {
+      toast.error("Host Required", {
+        description: "Please select at least one host for your podcast."
+      });
+      return;
+    }
+    
+    // Make sure we have a valid session token
+    const isValid = await refreshSession();
+    if (!isValid) {
+      toast.error("Session expired", {
+        description: "Your session has expired. Please log in again."
+      });
+      return;
+    }
+    
     setIsGenerating(true);
     onGenerateStart();
     
@@ -121,6 +138,7 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
       console.log("Generating podcast with URL:", `${supabaseUrl}/functions/v1/generate-podcast`);
       console.log("Project ID:", project.id);
       console.log("Character controls:", characterControls);
+      console.log("Selected hosts:", project.selected_hosts);
       console.log("Session access token:", session.access_token ? "Present" : "Missing");
       
       // First check if we are authenticated properly
@@ -227,7 +245,7 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
         <button
           className="w-full bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl disabled:opacity-70 disabled:cursor-not-allowed"
           onClick={handleGeneratePodcast}
-          disabled={isGenerating || !project.script || !hasActiveApiKey}
+          disabled={isGenerating || !project.script || !hasActiveApiKey || !project.selected_hosts || project.selected_hosts.length === 0}
         >
           {isGenerating ? (
             <div className="flex items-center justify-center">
@@ -239,6 +257,8 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
             </div>
           ) : !hasActiveApiKey ? (
             "Add ElevenLabs API Key to Generate Podcast"
+          ) : !project.selected_hosts || project.selected_hosts.length === 0 ? (
+            "Select at least one host"
           ) : (
             "Generate AI Podcast"
           )}
@@ -247,6 +267,12 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
         {!hasActiveApiKey && (
           <p className="text-sm text-amber-500 mt-2 text-center">
             You need to add a valid ElevenLabs API key with available character quota in your dashboard settings.
+          </p>
+        )}
+        
+        {(!project.selected_hosts || project.selected_hosts.length === 0) && hasActiveApiKey && (
+          <p className="text-sm text-amber-500 mt-2 text-center">
+            Please select at least one host for your podcast in the host selection step.
           </p>
         )}
       </div>
