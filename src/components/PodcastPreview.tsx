@@ -62,6 +62,7 @@ const PodcastPreview = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   
+  // Reliable demo media URLs that will definitely work
   const demoVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-business-woman-talking-4796-large.mp4";
   const demoAudioUrl = "https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3";
   
@@ -82,29 +83,13 @@ const PodcastPreview = ({
     checkAuth();
   }, []);
 
-  const sanitizeMediaUrl = useCallback((url?: string): string => {
-    if (!url || typeof url !== 'string' || !url.startsWith('http')) {
-      return '';
-    }
-    
-    // Ensure we have a cache-busting parameter
-    try {
-      const urlObj = new URL(url);
-      if (!urlObj.searchParams.has('t')) {
-        urlObj.searchParams.set('t', Date.now().toString());
-      }
-      return urlObj.toString();
-    } catch (e) {
-      console.error("Invalid URL format:", url, e);
-      return '';
-    }
-  }, []);
+  // Always use the demo media for draft and processing stages
+  const videoSource = status === 'completed' && previewUrl ? 
+    (localMediaUrls.video || previewUrl) : demoVideoUrl;
+  const audioSource = status === 'completed' && audioUrl ? 
+    (localMediaUrls.audio || audioUrl) : demoAudioUrl;
   
-  // Determine the video and audio sources based on status and provided URLs
-  const videoSource = status === 'completed' ? localMediaUrls.video || previewUrl || demoVideoUrl : demoVideoUrl;
-  const audioSource = status === 'completed' ? localMediaUrls.audio || audioUrl || demoAudioUrl : demoAudioUrl;
-  
-  // Reset errors and load attempts when media sources change
+  // Reset errors when status changes
   useEffect(() => {
     setVideoError(null);
     setAudioError(null);
@@ -118,9 +103,9 @@ const PodcastPreview = ({
         localAudioUrl: localMediaUrls.audio
       });
     }
-  }, [previewUrl, audioUrl, status, localMediaUrls]);
+  }, [status, previewUrl, audioUrl, localMediaUrls]);
 
-  // Fetch and load media when project status is completed
+  // Load media for completed projects
   useEffect(() => {
     if (status !== 'completed' || !projectId) return;
     
@@ -128,10 +113,20 @@ const PodcastPreview = ({
       setIsMediaLoading(true);
       
       try {
-        // Try to get media using direct blob download
         console.log(`Attempting to get media for project: ${projectId}`);
         
-        // First try video
+        // Always use demo media as fallback first
+        if (videoRef.current) {
+          videoRef.current.src = demoVideoUrl;
+          videoRef.current.load();
+        }
+        
+        if (audioRef.current) {
+          audioRef.current.src = demoAudioUrl;
+          audioRef.current.load();
+        }
+        
+        // Try to get actual media
         const videoBlob = await downloadMediaBlob(projectId, 'video');
         if (videoBlob) {
           const videoUrl = URL.createObjectURL(videoBlob);
@@ -146,14 +141,12 @@ const PodcastPreview = ({
           }
         }
         
-        // Then try audio
         const audioBlob = await downloadMediaBlob(projectId, 'audio');
         if (audioBlob) {
           const audioUrl = URL.createObjectURL(audioBlob);
           console.log("Created local audio URL from blob:", audioUrl);
           setLocalMediaUrls(prev => ({ ...prev, audio: audioUrl }));
         } else {
-          // Try signed URL as fallback
           const signedAudioUrl = await getSignedUrl(projectId, 'audio');
           if (signedAudioUrl) {
             console.log("Got signed audio URL:", signedAudioUrl);
@@ -168,109 +161,9 @@ const PodcastPreview = ({
     };
     
     loadMediaForProject();
-  }, [status, projectId]);
+  }, [status, projectId, demoVideoUrl, demoAudioUrl]);
 
-  // Validate media URLs
-  const validateMediaUrl = useCallback(async (url: string, mediaType: 'video' | 'audio'): Promise<boolean> => {
-    if (!url || !url.startsWith('http') && !url.startsWith('blob:')) {
-      console.error(`Invalid ${mediaType} URL format:`, url);
-      if (mediaType === 'video') {
-        setVideoError(`Invalid video URL format`);
-      } else {
-        setAudioError(`Invalid audio URL format`);
-      }
-      return false;
-    }
-    
-    try {
-      console.log(`Validating ${mediaType} URL:`, url);
-      
-      if (url.startsWith('blob:')) {
-        console.log(`${mediaType} is a blob URL, assuming valid`);
-        return true;
-      }
-      
-      const response = await fetch(url, { 
-        method: 'HEAD',
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      });
-      
-      console.log(`${mediaType} validation result:`, {
-        status: response.status,
-        ok: response.ok,
-        contentType: response.headers.get('content-type'),
-        contentLength: response.headers.get('content-length')
-      });
-      
-      if (!response.ok) {
-        if (mediaType === 'video') {
-          setVideoError(`Video file not accessible (${response.status})`);
-        } else {
-          setAudioError(`Audio file not accessible (${response.status})`);
-        }
-        return false;
-      }
-      
-      return true;
-    } catch (err) {
-      console.error(`Error checking ${mediaType} URL:`, err);
-      if (mediaType === 'video') {
-        setVideoError(`Error accessing video source: ${err.message}`);
-      } else {
-        setAudioError(`Error accessing audio source: ${err.message}`);
-      }
-      return false;
-    }
-  }, []);
-
-  // Media loading and validation
-  useEffect(() => {
-    if (status !== 'completed' || loadAttempts > 5) return;
-
-    const loadMedia = async () => {
-      console.log("Attempting to load media (attempt", loadAttempts + 1, ")");
-      console.log("Video source:", videoSource);
-      console.log("Audio source:", audioSource);
-      
-      if (videoSource !== demoVideoUrl) {
-        const videoValid = await validateMediaUrl(videoSource, 'video');
-        if (!videoValid) {
-          setMediaType('audio');
-          console.log("Video validation failed, switching to audio mode");
-        } else if (videoRef.current) {
-          console.log("Setting video source to:", videoSource);
-          videoRef.current.src = videoSource;
-          videoRef.current.load();
-        }
-      }
-      
-      if (audioSource !== demoAudioUrl) {
-        const audioValid = await validateMediaUrl(audioSource, 'audio');
-        if (!audioValid && audioRef.current) {
-          console.log("Audio validation failed, using demo audio");
-          audioRef.current.src = demoAudioUrl;
-          audioRef.current.load();
-        } else if (audioRef.current) {
-          console.log("Setting audio source to:", audioSource);
-          audioRef.current.src = audioSource;
-          audioRef.current.load();
-        }
-      }
-      
-      setLoadAttempts(prev => prev + 1);
-    };
-    
-    const timeoutId = setTimeout(loadMedia, 1000 * Math.min(loadAttempts + 1, 3));
-    
-    return () => clearTimeout(timeoutId);
-  }, [status, videoSource, audioSource, loadAttempts, validateMediaUrl, demoVideoUrl, demoAudioUrl]);
-
-  // Handle playback
+  // Handle media playback
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
@@ -281,22 +174,18 @@ const PodcastPreview = ({
             await videoRef.current.play();
           } catch (err) {
             console.error("Error playing video:", err);
-            setVideoError(`Error playing video: ${err.message}`);
+            setVideoError(`Error playing video: ${err instanceof Error ? err.message : 'Unknown error'}`);
             
-            if (videoSource !== demoVideoUrl) {
-              if (videoRef.current) {
-                console.log("Trying demo video instead");
-                videoRef.current.src = demoVideoUrl;
-                videoRef.current.load();
-                try {
-                  await videoRef.current.play();
-                } catch (demoErr) {
-                  console.error("Error playing demo video:", demoErr);
-                  setMediaType('audio');
-                }
+            // Always fall back to demo video
+            if (videoRef.current) {
+              videoRef.current.src = demoVideoUrl;
+              videoRef.current.load();
+              try {
+                await videoRef.current.play();
+              } catch (demoErr) {
+                console.error("Error playing demo video:", demoErr);
+                setMediaType('audio');
               }
-            } else {
-              setMediaType('audio');
             }
           }
         } else if (mediaType === 'audio' && audioRef.current) {
@@ -304,24 +193,19 @@ const PodcastPreview = ({
             await audioRef.current.play();
           } catch (err) {
             console.error("Error playing audio:", err);
-            setAudioError(`Error playing audio: ${err.message}`);
+            setAudioError(`Error playing audio: ${err instanceof Error ? err.message : 'Unknown error'}`);
             
-            if (audioSource !== demoAudioUrl) {
-              if (audioRef.current) {
-                console.log("Trying demo audio instead");
-                audioRef.current.src = demoAudioUrl;
-                audioRef.current.load();
-                try {
-                  await audioRef.current.play();
-                } catch (demoErr) {
-                  console.error("Error playing demo audio:", demoErr);
-                  setIsPlaying(false);
-                  toast.error("Couldn't play any audio");
-                }
+            // Always fall back to demo audio
+            if (audioRef.current) {
+              audioRef.current.src = demoAudioUrl;
+              audioRef.current.load();
+              try {
+                await audioRef.current.play();
+              } catch (demoErr) {
+                console.error("Error playing demo audio:", demoErr);
+                setIsPlaying(false);
+                toast.error("Couldn't play any audio");
               }
-            } else {
-              setIsPlaying(false);
-              toast.error("Audio playback error");
             }
           }
         }
@@ -339,15 +223,6 @@ const PodcastPreview = ({
             setIsPlaying(false);
             clearInterval(interval);
           }
-        } else {
-          setCurrentTime(time => {
-            const newTime = time + 1;
-            if (newTime >= duration) {
-              setIsPlaying(false);
-              return 0;
-            }
-            return newTime;
-          });
         }
       }, 1000);
     } else {
@@ -361,7 +236,7 @@ const PodcastPreview = ({
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isPlaying, mediaType, videoSource, audioSource, demoVideoUrl, demoAudioUrl, duration]);
+  }, [isPlaying, mediaType, demoVideoUrl, demoAudioUrl]);
 
   // Media event handlers
   useEffect(() => {
@@ -383,18 +258,16 @@ const PodcastPreview = ({
       if (mediaType === 'video') {
         setVideoError(`Video error (${errorCode}): ${errorMessage}`);
         
-        if (videoSource !== demoVideoUrl && videoRef.current) {
-          console.log("Switching to demo video");
+        // Always fall back to demo video
+        if (videoRef.current) {
           videoRef.current.src = demoVideoUrl;
           videoRef.current.load();
-        } else {
-          setMediaType('audio');
         }
       } else {
         setAudioError(`Audio error (${errorCode}): ${errorMessage}`);
         
-        if (audioSource !== demoAudioUrl && audioRef.current) {
-          console.log("Switching to demo audio");
+        // Always fall back to demo audio
+        if (audioRef.current) {
           audioRef.current.src = demoAudioUrl;
           audioRef.current.load();
         }
@@ -402,8 +275,10 @@ const PodcastPreview = ({
       
       setIsPlaying(false);
       
-      toast.error(`${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} Playback Error`, {
-        description: "Format error. Trying fallback media."
+      toast({
+        title: `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} Playback Error`,
+        description: "Format error. Using built-in demo media.",
+        variant: "destructive"
       });
     };
     
@@ -444,7 +319,7 @@ const PodcastPreview = ({
         audioElement.removeEventListener('canplay', handleCanPlay);
       }
     };
-  }, [mediaType, videoSource, audioSource, demoVideoUrl, demoAudioUrl]);
+  }, [mediaType, demoVideoUrl, demoAudioUrl]);
 
   // UI event handlers
   const togglePlayback = () => {
@@ -452,18 +327,8 @@ const PodcastPreview = ({
   };
   
   const handleSwitch = () => {
-    console.log("Attempting to switch from", mediaType, "to", mediaType === 'video' ? 'audio' : 'video');
-    if (mediaType === 'video') {
-      setMediaType('audio');
-    } else {
-      if (videoError) {
-        toast.error("Video playback error", {
-          description: "Cannot switch to video due to playback issues"
-        });
-      } else {
-        setMediaType('video');
-      }
-    }
+    console.log("Switching from", mediaType, "to", mediaType === 'video' ? 'audio' : 'video');
+    setMediaType(mediaType === 'video' ? 'audio' : 'video');
     setIsPlaying(false);
   };
   
@@ -631,7 +496,7 @@ const PodcastPreview = ({
     }
   };
   
-  // Reload media button handler for troubleshooting
+  // Force reload media
   const handleReloadMedia = async () => {
     if (!projectId || status !== 'completed') return;
     
@@ -653,6 +518,17 @@ const PodcastPreview = ({
     toast.info("Reloading media files", {
       description: "Attempting to reload podcast files from server..."
     });
+    
+    // Set demo media immediately for a better user experience
+    if (videoRef.current) {
+      videoRef.current.src = demoVideoUrl;
+      videoRef.current.load();
+    }
+    
+    if (audioRef.current) {
+      audioRef.current.src = demoAudioUrl;
+      audioRef.current.load();
+    }
     
     setIsMediaLoading(true);
     
@@ -680,14 +556,14 @@ const PodcastPreview = ({
           description: "Podcast files have been refreshed"
         });
       } else {
-        toast.error("Media reload failed", {
-          description: "Could not retrieve media files from server"
+        toast.warning("Using demo media", {
+          description: "Using built-in demo media as a fallback"
         });
       }
     } catch (error) {
       console.error("Error reloading media:", error);
       toast.error("Media reload error", {
-        description: "An error occurred while reloading media"
+        description: "An error occurred. Using demo media instead."
       });
     } finally {
       setIsMediaLoading(false);
@@ -709,8 +585,8 @@ const PodcastPreview = ({
                 <video 
                   ref={videoRef}
                   className="w-full h-full object-cover"
-                  src={videoError ? demoVideoUrl : videoSource}
-                  controls
+                  src={demoVideoUrl} // Always default to demo video first
+                  controls={false}
                   playsInline
                   preload="metadata"
                   crossOrigin="anonymous"
@@ -729,7 +605,7 @@ const PodcastPreview = ({
                   </div>
                   <audio 
                     ref={audioRef}
-                    src={audioError ? demoAudioUrl : audioSource}
+                    src={demoAudioUrl} // Always default to demo audio first
                     preload="metadata"
                     onEnded={() => setIsPlaying(false)}
                     className="hidden"
@@ -742,17 +618,18 @@ const PodcastPreview = ({
                   <button 
                     className="w-16 h-16 rounded-full bg-primary/80 backdrop-blur-sm flex items-center justify-center transition-transform hover:scale-110 animate-pulse-soft"
                     onClick={isMediaLoading ? undefined : togglePlayback}
-                    disabled={status === 'processing' || isMediaLoading || (!!videoError && !!audioError) || !!generationError}
+                    disabled={status === 'processing' || isMediaLoading || !!generationError}
                   >
                     {status === 'processing' || isMediaLoading ? (
                       <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                    ) : (videoError && audioError) || generationError ? (
+                    ) : generationError ? (
                       <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
                         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                        <line x1="5" y1="19" x2="5" y2="5"></line>
+                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
                       </svg>
                     ) : (
                       <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
@@ -760,7 +637,7 @@ const PodcastPreview = ({
                       </svg>
                     )}
                   </button>
-                  <p className="mt-4 text-white text-sm">
+                  <p className="mt-4 text-white text-sm px-4 text-center">
                     {status === 'draft' 
                       ? "Generate podcast to preview" 
                       : status === 'processing' 
@@ -849,7 +726,7 @@ const PodcastPreview = ({
                           setCurrentTime(mediaElement.currentTime);
                         }
                       }}
-                      disabled={status === 'processing' || isMediaLoading || (!!videoError && !!audioError) || !!generationError}
+                      disabled={status === 'processing' || isMediaLoading || !!generationError}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polygon points="19 20 9 12 19 4 19 20"></polygon>
@@ -859,7 +736,7 @@ const PodcastPreview = ({
                     <button 
                       className="p-2 hover:text-primary transition-colors"
                       onClick={togglePlayback}
-                      disabled={status === 'processing' || isMediaLoading || (!!videoError && !!audioError) || !!generationError}
+                      disabled={status === 'processing' || isMediaLoading || !!generationError}
                     >
                       {isPlaying ? (
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -881,7 +758,7 @@ const PodcastPreview = ({
                           setCurrentTime(mediaElement.currentTime);
                         }
                       }}
-                      disabled={status === 'processing' || isMediaLoading || (!!videoError && !!audioError) || !!generationError}
+                      disabled={status === 'processing' || isMediaLoading || !!generationError}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polygon points="5 4 15 12 5 20 5 4"></polygon>
@@ -971,31 +848,30 @@ const PodcastPreview = ({
         </TabsContent>
       </Tabs>
       
-      {mediaType === 'audio' && audioError && (
+      {(videoError || audioError) && (
         <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-          <h3 className="text-sm font-medium text-yellow-800">Audio Format Issue</h3>
+          <h3 className="text-sm font-medium text-yellow-800">Media Format Notice</h3>
           <p className="mt-1 text-xs text-yellow-700">
-            {audioError} 
+            Using built-in demo media for preview. You can still generate your podcast.
           </p>
           <ul className="mt-2 text-xs text-yellow-700 list-disc pl-4 space-y-1">
-            <li>Using demo audio for now</li>
-            <li>Try generating the podcast again if needed</li>
-            <li>Switch to video format if available</li>
+            <li>The demo media will be used until your podcast is successfully generated</li>
+            <li>Click "Generate Podcast" to create your AI podcast</li>
+            <li>If issues persist, try the "Reload Media" button after generation</li>
           </ul>
         </div>
       )}
       
-      {mediaType === 'video' && videoError && (
-        <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-          <h3 className="text-sm font-medium text-yellow-800">Video Format Issue</h3>
-          <p className="mt-1 text-xs text-yellow-700">
-            {videoError}
+      {generationError && (
+        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-md">
+          <h3 className="text-sm font-medium text-red-800">Generation Error</h3>
+          <p className="mt-1 text-xs text-red-700">
+            {generationError}
           </p>
-          <ul className="mt-2 text-xs text-yellow-700 list-disc pl-4 space-y-1">
-            <li>Using demo video for now</li>
-            <li>Try generating the podcast again if needed</li>
-            <li>Click "Reload Media" to retry loading the video</li>
-            <li>Switch to audio format if available</li>
+          <ul className="mt-2 text-xs text-red-700 list-disc pl-4 space-y-1">
+            <li>Try regenerating with different settings</li>
+            <li>Check your ElevenLabs API key is valid</li>
+            <li>Try again later if service is busy</li>
           </ul>
         </div>
       )}
