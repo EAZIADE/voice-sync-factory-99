@@ -14,6 +14,7 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    storage: localStorage,
   },
   global: {
     headers: {
@@ -53,7 +54,7 @@ export const getMediaUrl = (projectId: string, fileType: 'audio' | 'video'): str
   const extension = fileType === 'audio' ? 'mp3' : 'mp4';
   const path = `${projectId}/${fileType}.${extension}`;
   
-  // Force no caching
+  // Force no caching with a unique timestamp for each request
   const timestamp = new Date().getTime();
   const { data } = supabase.storage.from('podcasts').getPublicUrl(`${path}?t=${timestamp}`);
   return data.publicUrl;
@@ -77,7 +78,14 @@ export const checkMediaFileExists = async (projectId: string, fileType: 'audio' 
       try {
         const { data: publicUrlData } = supabase.storage.from('podcasts').getPublicUrl(path);
         if (publicUrlData && publicUrlData.publicUrl) {
-          const response = await fetch(publicUrlData.publicUrl, { method: 'HEAD' });
+          const response = await fetch(publicUrlData.publicUrl, { 
+            method: 'HEAD',
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache'
+            }
+          });
           return response.ok;
         }
       } catch (headError) {
@@ -96,25 +104,40 @@ export const checkMediaFileExists = async (projectId: string, fileType: 'audio' 
 
 export const downloadMediaFile = async (projectId: string, fileType: 'audio' | 'video'): Promise<{success: boolean, url: string, message?: string}> => {
   try {
+    // First make sure we have a valid session
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      await refreshSession();
+    }
+    
     const extension = fileType === 'audio' ? 'mp3' : 'mp4';
     const path = `${projectId}/${fileType}.${extension}`;
     
-    // Check if session exists
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.warn("No authenticated session for download operation");
-    }
+    // Ensure the bucket exists
+    await ensurePodcastsBucketExists();
     
     // First try getting the public URL for direct access
     const { data: publicUrlData } = supabase.storage.from('podcasts').getPublicUrl(path);
     if (publicUrlData && publicUrlData.publicUrl) {
       // Try a HEAD request first to validate the URL
       try {
-        const headResponse = await fetch(publicUrlData.publicUrl, { method: 'HEAD' });
+        const headResponse = await fetch(publicUrlData.publicUrl, { 
+          method: 'HEAD',
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        });
+        
         if (headResponse.ok) {
+          // Construct a sanitized URL with cache-busting query parameter
+          const url = new URL(publicUrlData.publicUrl);
+          url.searchParams.set('t', Date.now().toString());
+          
           return {
             success: true,
-            url: publicUrlData.publicUrl,
+            url: url.toString(),
             message: 'Direct download URL available'
           };
         }
@@ -152,10 +175,13 @@ export const deleteMediaFile = async (projectId: string): Promise<{success: bool
     // Check if session exists
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      return {
-        success: false,
-        message: 'Authentication required to delete media files'
-      };
+      const refreshed = await refreshSession();
+      if (!refreshed) {
+        return {
+          success: false,
+          message: 'Authentication required to delete media files'
+        };
+      }
     }
     
     // Delete both audio and video files
@@ -213,6 +239,51 @@ export const refreshSession = async (): Promise<boolean> => {
     return true;
   } catch (error) {
     console.error('Error refreshing session:', error);
+    return false;
+  }
+};
+
+// Format validation checker for media files
+export const validateMediaFile = async (url: string, type: 'audio' | 'video'): Promise<boolean> => {
+  if (!url || typeof url !== 'string') {
+    return false;
+  }
+  
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD',
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
+    });
+    
+    if (!response.ok) {
+      console.error(`${type} file not accessible:`, response.status);
+      return false;
+    }
+    
+    const contentType = response.headers.get('content-type');
+    if (!contentType) {
+      console.error(`No content-type for ${type} file`);
+      return false;
+    }
+    
+    // Check for appropriate content types
+    if (type === 'audio' && !contentType.includes('audio/')) {
+      console.error(`Invalid content type for audio: ${contentType}`);
+      return false;
+    }
+    
+    if (type === 'video' && !contentType.includes('video/')) {
+      console.error(`Invalid content type for video: ${contentType}`);
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error(`Error validating ${type} file:`, error);
     return false;
   }
 };
