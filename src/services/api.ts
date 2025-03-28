@@ -196,7 +196,7 @@ export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabs
       return data.map(key => ({
         ...key,
         is_local: false
-      }));
+      })) as ElevenLabsApiKey[];
     }
     
     // If no keys in database, check local storage
@@ -231,10 +231,10 @@ export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabs
         return localKeys; 
       }
       
-      return migratedData.map(key => ({
+      return (migratedData?.map(key => ({
         ...key,
         is_local: false
-      })) || [];
+      })) || []) as ElevenLabsApiKey[];
     }
     
     return [];
@@ -291,7 +291,7 @@ export const addElevenLabsApiKey = async (apiKey: Omit<ElevenLabsApiKey, 'id'>):
         last_used: apiKey.last_used,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      })
+      } as any)
       .select()
       .single();
       
@@ -312,7 +312,7 @@ export const addElevenLabsApiKey = async (apiKey: Omit<ElevenLabsApiKey, 'id'>):
     return {
       ...data,
       is_local: false
-    };
+    } as ElevenLabsApiKey;
   } catch (error) {
     console.error("Error adding ElevenLabs API key:", error);
     // Fall back to local storage
@@ -350,7 +350,7 @@ export const updateElevenLabsApiKey = async (keyId: string, updates: Partial<Ele
       .update({
         ...updates,
         updated_at: new Date().toISOString()
-      })
+      } as any)
       .eq('id', keyId)
       .select()
       .single();
@@ -369,7 +369,7 @@ export const updateElevenLabsApiKey = async (keyId: string, updates: Partial<Ele
     return {
       ...data,
       is_local: false
-    };
+    } as ElevenLabsApiKey;
   } catch (error) {
     console.error("Error updating ElevenLabs API key:", error);
     

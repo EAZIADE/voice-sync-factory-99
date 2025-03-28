@@ -9,6 +9,42 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      eleven_labs_api_keys: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          key: string
+          last_used: string | null
+          name: string
+          quota_remaining: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key: string
+          last_used?: string | null
+          name: string
+          quota_remaining?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key?: string
+          last_used?: string | null
+          name?: string
+          quota_remaining?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       hosts: {
         Row: {
           created_at: string
