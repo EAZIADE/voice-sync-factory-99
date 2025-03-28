@@ -1,3 +1,4 @@
+
 // Function to generate AI podcasts with character animation using ElevenLabs API
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.23.0";
@@ -97,30 +98,34 @@ serve(async (req: Request) => {
       }
     );
     
+    // First verify the project exists and belongs to the user
+    let projectData;
     try {
-      // First verify the project exists and belongs to the user
       console.log("Fetching project data for ID:", projectId);
-      const { data: projectData, error: projectError } = await supabaseClient
+      const { data, error } = await supabaseClient
         .from('projects')
-        .select('*, user_id')
+        .select('*, selected_hosts')
         .eq('id', projectId)
         .single();
         
-      if (projectError) {
-        console.error("Project error:", projectError);
+      if (error) {
+        console.error("Project error:", error);
         return new Response(
-          JSON.stringify({ error: `Project not found or not authorized: ${projectError.message}` }),
+          JSON.stringify({ error: `Project not found or not authorized: ${error.message}` }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
-      if (!projectData) {
+      if (!data) {
         console.error("No project data found");
         return new Response(
           JSON.stringify({ error: "Project not found" }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      
+      projectData = data;
+      console.log("Project data retrieved:", projectData);
       
       // Get authenticated user information
       console.log("Getting authenticated user");
@@ -157,6 +162,14 @@ serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ error: `Authentication error: ${authError.message}` }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // Make sure project has selected hosts
+    if (!projectData.selected_hosts || projectData.selected_hosts.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "No hosts selected for this podcast. Please select at least one host." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     
@@ -238,7 +251,21 @@ serve(async (req: Request) => {
     // Start the podcast generation in the background
     setTimeout(async () => {
       try {
-        // Get script content from project or use default
+        // Map selected host to voice ID
+        let voiceId = "21m00Tcm4TlvDq8ikWAM"; // Default ElevenLabs voice ID (Rachel)
+        
+        if (projectData.selected_hosts && projectData.selected_hosts.length > 0) {
+          // Get the first selected host's voice_id if available
+          const selectedHost = projectData.selected_hosts[0];
+          if (selectedHost && selectedHost.voice_id) {
+            voiceId = selectedHost.voice_id;
+            console.log("Using selected host voice ID:", voiceId);
+          } else {
+            console.log("Selected host doesn't have a voice_id, using default voice");
+          }
+        }
+        
+        // Get script content from project
         const scriptContent = projectData.script || "Welcome to this AI-generated podcast. Today we're discussing the fascinating world of artificial intelligence and its applications in modern technology.";
         
         console.log("Starting ElevenLabs text-to-speech generation");
@@ -267,9 +294,6 @@ serve(async (req: Request) => {
         };
         
         // Step 1: Generate audio using ElevenLabs TTS API
-        // Using a default voice ID - in a real app, you would map from selected_hosts
-        const voiceId = "21m00Tcm4TlvDq8ikWAM"; // Default ElevenLabs voice ID (Rachel)
-        
         let currentKeyIndex = 0;
         let currentApiKey = apiKey;
         let audioBlob: Blob | null = null;
@@ -278,6 +302,7 @@ serve(async (req: Request) => {
         // Try to generate audio with available keys
         while (attempts > 0 && !audioBlob) {
           try {
+            console.log(`Attempting to generate audio with voice ID: ${voiceId}`);
             const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
               method: 'POST',
               headers: {
@@ -476,6 +501,18 @@ serve(async (req: Request) => {
               throw new Error(`ElevenLabs upload API error: ${uploadResponse.status} ${errorText}`);
             }
             
+            // Apply character controls to the conversion
+            const startPayload = {
+              // Apply character controls from the input
+              expressiveness: characterControls?.expressiveness || 70,
+              gesture_intensity: characterControls?.gestureIntensity || 50,
+              speaking_pace: characterControls?.speakingPace || 60,
+              auto_generate_gestures: characterControls?.autoGestures !== false,
+              maintain_eye_contact: characterControls?.eyeContact !== false
+            };
+            
+            console.log("Starting conversion with settings:", startPayload);
+            
             // Start the conversion
             const startResponse = await fetch(`https://api.elevenlabs.io/v1/speech-to-speech/convert/${conversionId}/start`, {
               method: 'POST',
@@ -483,7 +520,7 @@ serve(async (req: Request) => {
                 'Content-Type': 'application/json',
                 'xi-api-key': currentApiKey
               },
-              body: JSON.stringify({})
+              body: JSON.stringify(startPayload)
             });
             
             if (!startResponse.ok) {

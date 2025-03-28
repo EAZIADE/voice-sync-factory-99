@@ -154,7 +154,10 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
           body: JSON.stringify({ 
             projectId: project.id,
             characterControls
-          })
+          }),
+          headers: {
+            Authorization: `Bearer ${session.access_token}`
+          }
         });
         
         if (error) throw error;

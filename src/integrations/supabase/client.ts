@@ -3,8 +3,8 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = "https://cvfqcvytoobplgracobg.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2ZnFjdnl0b29icGxncmFjb2JnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTY4NjksImV4cCI6MjA1ODU5Mjg2OX0.k6ho8-LWVYgMAbmu2_pViojgJN51FoWdPREqD-p9htw";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://cvfqcvytoobplgracobg.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2ZnFjdnl0b29icGxncmFjb2JnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMTY4NjksImV4cCI6MjA1ODU5Mjg2OX0.k6ho8-LWVYgMAbmu2_pViojgJN51FoWdPREqD-p9htw";
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
@@ -40,6 +40,16 @@ export const ensurePodcastsBucketExists = async (): Promise<boolean> => {
       if (error) {
         console.error('Error creating podcasts bucket:', error);
         return false;
+      }
+    } else {
+      // Make sure the bucket is public
+      const { error } = await supabase.storage.updateBucket('podcasts', {
+        public: true,
+        fileSizeLimit: 100 * 1024 * 1024 // 100MB limit
+      });
+      
+      if (error) {
+        console.error('Error updating podcasts bucket:', error);
       }
     }
     
