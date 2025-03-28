@@ -14,7 +14,7 @@ import { AnimatedButton } from "@/components/ui/AnimatedButton";
 import { Input } from "@/components/ui/input";
 import { useForm } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, CheckCircle, AlertCircle, Edit, Save, X, Database, HardDrive, Cloud } from "lucide-react";
+import { Trash2, CheckCircle, AlertCircle, Edit, Save, X, Database, HardDrive, Cloud, RefreshCw } from "lucide-react";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import * as z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -217,6 +217,38 @@ const ElevenLabsKeyManager = () => {
     }
   };
 
+  const refreshQuota = async (key: ElevenLabsApiKey) => {
+    if (!user) return;
+    
+    try {
+      toast({
+        title: "Refreshing quota",
+        description: "Please wait while we fetch the latest quota information...",
+      });
+      
+      const { quota_remaining } = await validateElevenLabsApiKey(key.key);
+      
+      await updateElevenLabsApiKey(key.id!, {
+        user_id: user.id,
+        quota_remaining: quota_remaining
+      });
+      
+      toast({
+        title: "Success",
+        description: "API key quota refreshed successfully!",
+      });
+      
+      await loadKeys();
+    } catch (error) {
+      console.error("Error refreshing API key quota:", error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh quota. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const formatQuota = (quota?: number) => {
     if (quota === undefined) return "Unknown";
     if (quota <= 0) return "Depleted";
@@ -381,6 +413,15 @@ const ElevenLabsKeyManager = () => {
                       
                       <div className="flex space-x-2">
                         <AnimatedButton 
+                          onClick={() => refreshQuota(key)}
+                          variant="outline"
+                          size="sm"
+                          title="Refresh character quota"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </AnimatedButton>
+
+                        <AnimatedButton 
                           onClick={() => startEditing(key)} 
                           variant="outline" 
                           size="sm"
@@ -411,9 +452,9 @@ const ElevenLabsKeyManager = () => {
                     </div>
                     
                     <div className="mt-3 text-sm grid grid-cols-2 gap-2">
-                      <div>
+                      <div className="flex items-center">
                         <span className="text-muted-foreground">Characters left:</span>{" "}
-                        <span className={`font-medium ${(key.quota_remaining || 0) <= 0 ? 'text-destructive' : ''}`}>
+                        <span className={`font-medium ml-1 ${(key.quota_remaining || 0) <= 0 ? 'text-destructive' : ''}`}>
                           {formatQuota(key.quota_remaining)}
                         </span>
                       </div>

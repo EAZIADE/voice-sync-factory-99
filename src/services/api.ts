@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { ElevenLabsApiKey, Host, Language, Project, Template } from "@/types";
 import { 
@@ -246,7 +245,7 @@ export const fetchElevenLabsApiKeys = async (userId: string): Promise<ElevenLabs
 };
 
 // Validate ElevenLabs API key with the ElevenLabs API
-export const validateElevenLabsApiKey = async (apiKey: string): Promise<boolean> => {
+export const validateElevenLabsApiKey = async (apiKey: string): Promise<{valid: boolean, quota_remaining?: number}> => {
   try {
     console.log("Validating ElevenLabs API key:", apiKey.substring(0, 8) + "...");
     
@@ -267,7 +266,10 @@ export const validateElevenLabsApiKey = async (apiKey: string): Promise<boolean>
     const data = await response.json();
     console.log("ElevenLabs API validation response:", data);
     
-    return true;
+    // Extract character quota information
+    const quota_remaining = data.character_count || 0;
+    
+    return { valid: true, quota_remaining };
   } catch (error) {
     console.error("Error validating ElevenLabs API key:", error);
     throw new Error(error instanceof Error ? error.message : "Failed to validate API key");
@@ -279,6 +281,9 @@ export const addElevenLabsApiKey = async (apiKey: Omit<ElevenLabsApiKey, 'id'>):
   try {
     console.log("Adding ElevenLabs API key:", apiKey.key?.substring(0, 8) + "...");
     
+    // Validate the key and get quota information
+    const { quota_remaining } = await validateElevenLabsApiKey(apiKey.key);
+    
     // Try to insert into the database
     const { data, error } = await supabase
       .from('eleven_labs_api_keys')
@@ -287,7 +292,7 @@ export const addElevenLabsApiKey = async (apiKey: Omit<ElevenLabsApiKey, 'id'>):
         name: apiKey.name,
         is_active: apiKey.is_active || true,
         user_id: apiKey.user_id,
-        quota_remaining: apiKey.quota_remaining,
+        quota_remaining: quota_remaining,
         last_used: apiKey.last_used,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -304,7 +309,7 @@ export const addElevenLabsApiKey = async (apiKey: Omit<ElevenLabsApiKey, 'id'>):
         name: apiKey.name,
         is_active: apiKey.is_active || true,
         user_id: apiKey.user_id,
-        quota_remaining: apiKey.quota_remaining,
+        quota_remaining: quota_remaining,
         last_used: apiKey.last_used
       });
     }
@@ -325,7 +330,7 @@ export const addElevenLabsApiKey = async (apiKey: Omit<ElevenLabsApiKey, 'id'>):
       name: apiKey.name,
       is_active: apiKey.is_active || true,
       user_id: apiKey.user_id,
-      quota_remaining: apiKey.quota_remaining,
+      quota_remaining: 0, // Default to 0 if validation failed
       last_used: apiKey.last_used
     });
   }
@@ -334,6 +339,18 @@ export const addElevenLabsApiKey = async (apiKey: Omit<ElevenLabsApiKey, 'id'>):
 // Update an ElevenLabs API key
 export const updateElevenLabsApiKey = async (keyId: string, updates: Partial<ElevenLabsApiKey>): Promise<ElevenLabsApiKey> => {
   try {
+    // If the key value is being updated, validate and get new quota
+    let quota_remaining = updates.quota_remaining;
+    if (updates.key) {
+      try {
+        const validationResult = await validateElevenLabsApiKey(updates.key);
+        quota_remaining = validationResult.quota_remaining;
+      } catch (validationError) {
+        console.error("Validation error when updating key:", validationError);
+        // Continue with update even if validation fails
+      }
+    }
+
     // Check if it's a local key by looking for is_local flag
     if (updates.is_local) {
       console.log("Updating local key:", keyId);
@@ -341,7 +358,10 @@ export const updateElevenLabsApiKey = async (keyId: string, updates: Partial<Ele
         throw new Error("User ID is required to update local key");
       }
       
-      return updateLocalElevenLabsKey(updates.user_id, keyId, updates);
+      return updateLocalElevenLabsKey(updates.user_id, keyId, {
+        ...updates,
+        quota_remaining
+      });
     }
     
     // Update in database
@@ -349,6 +369,7 @@ export const updateElevenLabsApiKey = async (keyId: string, updates: Partial<Ele
       .from('eleven_labs_api_keys')
       .update({
         ...updates,
+        quota_remaining,
         updated_at: new Date().toISOString()
       } as any)
       .eq('id', keyId)
@@ -363,7 +384,10 @@ export const updateElevenLabsApiKey = async (keyId: string, updates: Partial<Ele
         throw new Error("User ID is required to update local key");
       }
       
-      return updateLocalElevenLabsKey(updates.user_id, keyId, updates);
+      return updateLocalElevenLabsKey(updates.user_id, keyId, {
+        ...updates,
+        quota_remaining
+      });
     }
     
     return {
