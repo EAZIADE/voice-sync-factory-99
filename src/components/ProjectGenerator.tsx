@@ -39,10 +39,8 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
   const handleSourceSelected = async (source: ContentSource) => {
     try {
       if (!user) {
-        toast({
-          title: "Not authenticated",
-          description: "Please log in to process content",
-          variant: "destructive"
+        toast.error("Not authenticated", {
+          description: "Please log in to process content"
         });
         return;
       }
@@ -66,17 +64,14 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
         throw error;
       }
       
-      toast({
-        title: "Content processed",
-        description: "Your content has been processed and is ready for podcast generation",
+      toast.success("Content processed", {
+        description: "Your content has been processed and is ready for podcast generation"
       });
       
     } catch (error) {
       console.error("Error processing content source:", error);
-      toast({
-        title: "Processing error",
-        description: "Failed to process content. Please try again.",
-        variant: "destructive"
+      toast.error("Processing error", {
+        description: "Failed to process content. Please try again."
       });
     } finally {
       setIsProcessingSource(false);
@@ -85,10 +80,8 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
 
   const handleGeneratePodcast = async () => {
     if (!user || !session || !project.id) {
-      toast({
-        title: "Not authenticated",
-        description: "Please log in to generate a podcast",
-        variant: "destructive"
+      toast.error("Not authenticated", {
+        description: "Please log in to generate a podcast"
       });
       return;
     }
@@ -124,9 +117,8 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
         
         console.log("Generation response:", data);
         
-        toast({
-          title: "Podcast generation started",
-          description: "Your AI podcast is being generated. This may take a few minutes.",
+        toast.success("Podcast generation started", {
+          description: "Your AI podcast is being generated. This may take a few minutes."
         });
         
         onGenerateSuccess();
@@ -172,9 +164,8 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
       const data = await response.json();
       console.log("Generation response:", data);
       
-      toast({
-        title: "Podcast generation started",
-        description: "Your AI podcast is being generated. This may take a few minutes.",
+      toast.success("Podcast generation started", {
+        description: "Your AI podcast is being generated. This may take a few minutes."
       });
       
       onGenerateSuccess();
@@ -183,10 +174,8 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
       console.error("Error generating podcast:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to generate podcast";
       
-      toast({
-        title: "Generation error",
-        description: errorMessage,
-        variant: "destructive"
+      toast.error("Generation error", {
+        description: errorMessage
       });
       
       onGenerateError(errorMessage);
