@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
 import { Trash, Pencil, RotateCcw } from "lucide-react";
-import { downloadMediaFile, deleteMediaFile } from "@/integrations/supabase/client";
+import { downloadMediaFile, deleteMediaFile, isSessionValid, refreshSession } from "@/integrations/supabase/client";
 
 interface PodcastPreviewProps {
   projectId?: string;
@@ -53,6 +53,21 @@ const PodcastPreview = ({
   const demoVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-business-woman-talking-4796-large.mp4";
   const demoAudioUrl = "https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3";
   
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  
+  useEffect(() => {
+    const checkAuth = async () => {
+      const valid = await isSessionValid();
+      setIsAuthenticated(valid);
+      
+      if (!valid) {
+        console.warn("User is not authenticated. Some functionality may not work correctly.");
+      }
+    };
+    
+    checkAuth();
+  }, []);
+
   const sanitizeMediaUrl = useCallback((url?: string): string => {
     if (!url || typeof url !== 'string' || !url.startsWith('http')) {
       return '';
@@ -94,7 +109,12 @@ const PodcastPreview = ({
       
       const response = await fetch(url, { 
         method: 'HEAD',
-        cache: 'no-store'
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
       });
       
       console.log(`${mediaType} validation result:`, {
@@ -123,7 +143,7 @@ const PodcastPreview = ({
       }
       return false;
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (status !== 'completed' || loadAttempts > 5) return;
@@ -404,6 +424,19 @@ const PodcastPreview = ({
       });
       return;
     }
+    
+    const isValid = await isSessionValid();
+    if (!isValid) {
+      const refreshed = await refreshSession();
+      if (!refreshed) {
+        hookToast({
+          title: "Authentication required",
+          description: "Please sign in again to download your podcast.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
 
     toast.info("Download started", {
       description: `Preparing your podcast ${mediaType} for download...`
@@ -443,7 +476,20 @@ const PodcastPreview = ({
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
+    const isValid = await isSessionValid();
+    if (!isValid) {
+      const refreshed = await refreshSession();
+      if (!refreshed) {
+        hookToast({
+          title: "Authentication required",
+          description: "Please sign in again to delete your podcast.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+    
     if (onDeleteClick) {
       onDeleteClick();
     }

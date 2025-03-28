@@ -1,4 +1,3 @@
-
 // Function to generate AI podcasts with character animation using ElevenLabs API
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.23.0";
@@ -83,6 +82,7 @@ serve(async (req: Request) => {
       );
     }
     
+    // Create a Supabase client that explicitly provides the token
     const supabaseClient = createClient(
       supabaseUrl,
       supabaseAnonKey,
@@ -91,63 +91,72 @@ serve(async (req: Request) => {
           headers: { Authorization: `Bearer ${token}` } 
         },
         auth: {
-          persistSession: false
+          persistSession: false,
+          autoRefreshToken: false, // Don't try to refresh tokens in edge functions
         }
       }
     );
     
-    // First verify the project exists and belongs to the user
-    console.log("Fetching project data for ID:", projectId);
-    const { data: projectData, error: projectError } = await supabaseClient
-      .from('projects')
-      .select('*, user_id')
-      .eq('id', projectId)
-      .single();
+    try {
+      // First verify the project exists and belongs to the user
+      console.log("Fetching project data for ID:", projectId);
+      const { data: projectData, error: projectError } = await supabaseClient
+        .from('projects')
+        .select('*, user_id')
+        .eq('id', projectId)
+        .single();
+        
+      if (projectError) {
+        console.error("Project error:", projectError);
+        return new Response(
+          JSON.stringify({ error: `Project not found or not authorized: ${projectError.message}` }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       
-    if (projectError) {
-      console.error("Project error:", projectError);
+      if (!projectData) {
+        console.error("No project data found");
+        return new Response(
+          JSON.stringify({ error: "Project not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      // Get authenticated user information
+      console.log("Getting authenticated user");
+      const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+      
+      if (userError) {
+        console.error("User auth error:", userError);
+        return new Response(
+          JSON.stringify({ error: `User authentication error: ${userError.message}` }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      if (!user) {
+        console.error("No authenticated user found");
+        return new Response(
+          JSON.stringify({ error: "Not authenticated. Please log in again." }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      console.log("Authenticated user ID:", user.id);
+      console.log("Project user ID:", projectData.user_id);
+      
+      // Verify user owns this project
+      if (projectData.user_id !== user.id) {
+        return new Response(
+          JSON.stringify({ error: "You don't have permission to access this project" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } catch (authError) {
+      console.error("Authentication verification error:", authError);
       return new Response(
-        JSON.stringify({ error: `Project not found or not authorized: ${projectError.message}` }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
-    if (!projectData) {
-      console.error("No project data found");
-      return new Response(
-        JSON.stringify({ error: "Project not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
-    // Get authenticated user information
-    console.log("Getting authenticated user");
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    
-    if (userError) {
-      console.error("User auth error:", userError);
-      return new Response(
-        JSON.stringify({ error: `User authentication error: ${userError.message}` }),
+        JSON.stringify({ error: `Authentication error: ${authError.message}` }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
-    if (!user) {
-      console.error("No authenticated user found");
-      return new Response(
-        JSON.stringify({ error: "Not authenticated. Please log in again." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
-    console.log("Authenticated user ID:", user.id);
-    console.log("Project user ID:", projectData.user_id);
-    
-    // Verify user owns this project
-    if (projectData.user_id !== user.id) {
-      return new Response(
-        JSON.stringify({ error: "You don't have permission to access this project" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     

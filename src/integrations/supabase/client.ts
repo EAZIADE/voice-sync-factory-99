@@ -9,7 +9,18 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+  global: {
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  },
+});
 
 // Storage bucket helpers for podcast media files
 export const ensurePodcastsBucketExists = async (): Promise<boolean> => {
@@ -42,7 +53,9 @@ export const getMediaUrl = (projectId: string, fileType: 'audio' | 'video'): str
   const extension = fileType === 'audio' ? 'mp3' : 'mp4';
   const path = `${projectId}/${fileType}.${extension}`;
   
-  const { data } = supabase.storage.from('podcasts').getPublicUrl(path);
+  // Force no caching
+  const timestamp = new Date().getTime();
+  const { data } = supabase.storage.from('podcasts').getPublicUrl(`${path}?t=${timestamp}`);
   return data.publicUrl;
 };
 
@@ -51,11 +64,28 @@ export const checkMediaFileExists = async (projectId: string, fileType: 'audio' 
     const extension = fileType === 'audio' ? 'mp3' : 'mp4';
     const path = `${projectId}/${fileType}.${extension}`;
     
-    const { data } = await supabase.storage.from('podcasts').list(projectId, {
+    // First attempt to list files in the specific project directory
+    const { data, error } = await supabase.storage.from('podcasts').list(projectId, {
       limit: 10,
       offset: 0,
       sortBy: { column: 'name', order: 'asc' }
     });
+    
+    if (error) {
+      console.error(`Error checking if ${fileType} file exists:`, error);
+      // Try a direct head request to see if the file exists
+      try {
+        const { data: publicUrlData } = supabase.storage.from('podcasts').getPublicUrl(path);
+        if (publicUrlData && publicUrlData.publicUrl) {
+          const response = await fetch(publicUrlData.publicUrl, { method: 'HEAD' });
+          return response.ok;
+        }
+      } catch (headError) {
+        console.error(`Error checking file with HEAD request:`, headError);
+      }
+      
+      return false;
+    }
     
     return data ? data.some(file => file.name === `${fileType}.${extension}`) : false;
   } catch (error) {
@@ -69,6 +99,31 @@ export const downloadMediaFile = async (projectId: string, fileType: 'audio' | '
     const extension = fileType === 'audio' ? 'mp3' : 'mp4';
     const path = `${projectId}/${fileType}.${extension}`;
     
+    // Check if session exists
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      console.warn("No authenticated session for download operation");
+    }
+    
+    // First try getting the public URL for direct access
+    const { data: publicUrlData } = supabase.storage.from('podcasts').getPublicUrl(path);
+    if (publicUrlData && publicUrlData.publicUrl) {
+      // Try a HEAD request first to validate the URL
+      try {
+        const headResponse = await fetch(publicUrlData.publicUrl, { method: 'HEAD' });
+        if (headResponse.ok) {
+          return {
+            success: true,
+            url: publicUrlData.publicUrl,
+            message: 'Direct download URL available'
+          };
+        }
+      } catch (headError) {
+        console.warn("HEAD request to public URL failed:", headError);
+      }
+    }
+    
+    // If public URL didn't work, try direct download
     const { data, error } = await supabase.storage.from('podcasts').download(path);
     
     if (error) {
@@ -94,6 +149,15 @@ export const downloadMediaFile = async (projectId: string, fileType: 'audio' | '
 
 export const deleteMediaFile = async (projectId: string): Promise<{success: boolean, message?: string}> => {
   try {
+    // Check if session exists
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      return {
+        success: false,
+        message: 'Authentication required to delete media files'
+      };
+    }
+    
     // Delete both audio and video files
     const { error: audioError } = await supabase.storage
       .from('podcasts')
@@ -121,5 +185,34 @@ export const deleteMediaFile = async (projectId: string): Promise<{success: bool
       success: false,
       message: `Failed to delete media files: ${error.message || 'Unknown error'}`
     };
+  }
+};
+
+// Helper function to check if a user's session is valid
+export const isSessionValid = async (): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data.session) {
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error('Error checking session validity:', error);
+    return false;
+  }
+};
+
+// Force refresh the auth token
+export const refreshSession = async (): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error || !data.session) {
+      console.error('Failed to refresh session:', error);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error('Error refreshing session:', error);
+    return false;
   }
 };
