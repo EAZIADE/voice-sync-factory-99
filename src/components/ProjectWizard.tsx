@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
@@ -8,7 +9,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { useToast } from "./ui/use-toast";
-import { createProject as createProject2 } from "@/services/api";
+import { createProject } from "@/services/api";
 
 interface ProjectFormData {
   title: string;
@@ -58,7 +59,7 @@ const ProjectWizard = () => {
     setIsSubmitting(true);
     
     try {
-      const project = await createProject2({
+      const project = await createProject({
         user_id: user.id,
         title: formData.title,
         description: formData.description || null,

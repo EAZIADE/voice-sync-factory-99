@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { ElevenLabsApiKey, Host, Language, Project, Template } from "@/types";
 import { 
@@ -57,42 +56,7 @@ export const fetchTemplates = async (): Promise<Template[]> => {
 /**
  * Create a new project
  */
-export const createProject = async (
-  userId: string,
-  title: string,
-  description: string,
-  languageId: string,
-  hostId: string,
-  templateId: string
-): Promise<Project> => {
-  const { data, error } = await supabase
-    .from('projects')
-    .insert([
-      {
-        user_id: userId,
-        title,
-        description,
-        language_id: languageId,
-        host_id: hostId,
-        template_id: templateId,
-        status: 'draft',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    ])
-    .select('*')
-    .single();
-
-  if (error) {
-    console.error('Error creating project:', error);
-    throw new Error('Failed to create project');
-  }
-
-  return convertToAppModel<Project>(data);
-};
-
-// Legacy project creation function for compatibility with existing code
-export const createProject2 = async (projectData: {
+export const createProject = async (projectData: {
   user_id: string;
   title: string;
   description: string | null;
