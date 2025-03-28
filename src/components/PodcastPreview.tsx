@@ -61,8 +61,8 @@ const PodcastPreview = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   
-  const demoVideoUrl = "https://assets.mixkit.co/videos/preview/mixkit-business-woman-talking-4796-large.mp4";
-  const demoAudioUrl = "https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3";
+  const demoVideoUrl = "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+  const demoAudioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
   
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   
@@ -102,6 +102,16 @@ const PodcastPreview = ({
   }, [status, previewUrl, audioUrl, localMediaUrls]);
 
   useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.src = demoVideoUrl;
+      videoRef.current.load();
+    }
+    
+    if (audioRef.current) {
+      audioRef.current.src = demoAudioUrl;
+      audioRef.current.load();
+    }
+    
     if (status !== 'completed' || !projectId) return;
     
     const loadMediaForProject = async () => {
@@ -110,26 +120,26 @@ const PodcastPreview = ({
       try {
         console.log(`Attempting to get media for project: ${projectId}`);
         
-        if (videoRef.current) {
-          videoRef.current.src = demoVideoUrl;
-          videoRef.current.load();
-        }
-        
-        if (audioRef.current) {
-          audioRef.current.src = demoAudioUrl;
-          audioRef.current.load();
-        }
-        
         const videoBlob = await downloadMediaBlob(projectId, 'video');
         if (videoBlob) {
           const videoUrl = URL.createObjectURL(videoBlob);
           console.log("Created local video URL from blob:", videoUrl);
           setLocalMediaUrls(prev => ({ ...prev, video: videoUrl }));
+          
+          if (videoRef.current) {
+            videoRef.current.src = videoUrl;
+            videoRef.current.load();
+          }
         } else {
           const signedVideoUrl = await getSignedUrl(projectId, 'video');
           if (signedVideoUrl) {
             console.log("Got signed video URL:", signedVideoUrl);
             setLocalMediaUrls(prev => ({ ...prev, video: signedVideoUrl }));
+            
+            if (videoRef.current) {
+              videoRef.current.src = signedVideoUrl;
+              videoRef.current.load();
+            }
           }
         }
         
@@ -138,15 +148,28 @@ const PodcastPreview = ({
           const audioUrl = URL.createObjectURL(audioBlob);
           console.log("Created local audio URL from blob:", audioUrl);
           setLocalMediaUrls(prev => ({ ...prev, audio: audioUrl }));
+          
+          if (audioRef.current) {
+            audioRef.current.src = audioUrl;
+            audioRef.current.load();
+          }
         } else {
           const signedAudioUrl = await getSignedUrl(projectId, 'audio');
           if (signedAudioUrl) {
             console.log("Got signed audio URL:", signedAudioUrl);
             setLocalMediaUrls(prev => ({ ...prev, audio: signedAudioUrl }));
+            
+            if (audioRef.current) {
+              audioRef.current.src = signedAudioUrl;
+              audioRef.current.load();
+            }
           }
         }
       } catch (error) {
         console.error("Error loading media for project:", error);
+        toast.error("Media loading failed", {
+          description: "There was an error loading your podcast media."
+        });
       } finally {
         setIsMediaLoading(false);
       }
@@ -162,38 +185,61 @@ const PodcastPreview = ({
       const playMedia = async () => {
         if (mediaType === 'video' && videoRef.current) {
           try {
+            console.log("Attempting to play video from source:", videoRef.current.src);
             await videoRef.current.play();
           } catch (err) {
             console.error("Error playing video:", err);
             setVideoError(`Error playing video: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsPlaying(false);
             
-            if (videoRef.current) {
+            if (videoRef.current && videoRef.current.src !== demoVideoUrl) {
+              console.log("Falling back to demo video");
               videoRef.current.src = demoVideoUrl;
               videoRef.current.load();
+              
+              toast.error("Video format issue", {
+                description: "Using demo video as fallback"
+              });
+              
               try {
                 await videoRef.current.play();
+                setIsPlaying(true);
               } catch (demoErr) {
                 console.error("Error playing demo video:", demoErr);
+                
                 setMediaType('audio');
+                toast.error("Video playback failed", {
+                  description: "Switching to audio mode"
+                });
               }
             }
           }
         } else if (mediaType === 'audio' && audioRef.current) {
           try {
+            console.log("Attempting to play audio from source:", audioRef.current.src);
             await audioRef.current.play();
           } catch (err) {
             console.error("Error playing audio:", err);
             setAudioError(`Error playing audio: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsPlaying(false);
             
-            if (audioRef.current) {
+            if (audioRef.current && audioRef.current.src !== demoAudioUrl) {
+              console.log("Falling back to demo audio");
               audioRef.current.src = demoAudioUrl;
               audioRef.current.load();
+              
+              toast.error("Audio format issue", {
+                description: "Using demo audio as fallback"
+              });
+              
               try {
                 await audioRef.current.play();
+                setIsPlaying(true);
               } catch (demoErr) {
                 console.error("Error playing demo audio:", demoErr);
-                setIsPlaying(false);
-                toast.error("Couldn't play any audio");
+                toast.error("Audio playback failed", {
+                  description: "Unable to play any audio content"
+                });
               }
             }
           }
@@ -238,32 +284,36 @@ const PodcastPreview = ({
     
     const handleError = (e: Event) => {
       const target = e.target as HTMLMediaElement;
-      console.error(`${mediaType} element error:`, target.error);
+      console.error(`${mediaType} element error:`, e);
       
       const errorMessage = target.error?.message || 'unknown error';
       const errorCode = target.error?.code || 0;
       
       if (mediaType === 'video') {
         setVideoError(`Video error (${errorCode}): ${errorMessage}`);
+        setIsPlaying(false);
         
-        if (videoRef.current) {
+        if (videoRef.current && videoRef.current.src !== demoVideoUrl) {
           videoRef.current.src = demoVideoUrl;
           videoRef.current.load();
+          
+          toast.error("Video format issue", {
+            description: "Using demo video as fallback"
+          });
         }
       } else {
         setAudioError(`Audio error (${errorCode}): ${errorMessage}`);
+        setIsPlaying(false);
         
-        if (audioRef.current) {
+        if (audioRef.current && audioRef.current.src !== demoAudioUrl) {
           audioRef.current.src = demoAudioUrl;
           audioRef.current.load();
+          
+          toast.error("Audio format issue", {
+            description: "Using demo audio as fallback"
+          });
         }
       }
-      
-      setIsPlaying(false);
-      
-      toast.error(`${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} Playback Error`, {
-        description: "Format error. Using built-in demo media."
-      });
     };
     
     const handleCanPlay = () => {
@@ -369,7 +419,7 @@ const PodcastPreview = ({
       }
     }
 
-    toast.info("Download started", {
+    toast("Download started", {
       description: `Preparing your podcast ${mediaType} for download...`
     });
     
@@ -385,7 +435,7 @@ const PodcastPreview = ({
           document.body.removeChild(a);
         }, 100);
         
-        toast.success("Download initiated", {
+        toast("Download initiated", {
           description: `Your video is being downloaded.`
         });
         return;
@@ -402,7 +452,7 @@ const PodcastPreview = ({
           document.body.removeChild(a);
         }, 100);
         
-        toast.success("Download initiated", {
+        toast("Download initiated", {
           description: `Your audio is being downloaded.`
         });
         return;
@@ -430,7 +480,7 @@ const PodcastPreview = ({
         }
       }, 100);
       
-      toast.success("Download initiated", {
+      toast("Download initiated", {
         description: `Your ${mediaType} is being downloaded.`
       });
     } catch (error) {
@@ -489,7 +539,7 @@ const PodcastPreview = ({
     
     setLocalMediaUrls({});
     
-    toast.info("Reloading media files", {
+    toast("Reloading media files", {
       description: "Attempting to reload podcast files from server..."
     });
     
@@ -514,11 +564,21 @@ const PodcastPreview = ({
       if (videoBlob) {
         newUrls.video = URL.createObjectURL(videoBlob);
         console.log("Created new local video URL:", newUrls.video);
+        
+        if (videoRef.current) {
+          videoRef.current.src = newUrls.video;
+          videoRef.current.load();
+        }
       }
       
       if (audioBlob) {
         newUrls.audio = URL.createObjectURL(audioBlob);
         console.log("Created new local audio URL:", newUrls.audio);
+        
+        if (audioRef.current) {
+          audioRef.current.src = newUrls.audio;
+          audioRef.current.load();
+        }
       }
       
       setLocalMediaUrls(newUrls);
@@ -557,7 +617,6 @@ const PodcastPreview = ({
                 <video 
                   ref={videoRef}
                   className="w-full h-full object-cover"
-                  src={demoVideoUrl}
                   controls={false}
                   playsInline
                   preload="metadata"
@@ -577,7 +636,6 @@ const PodcastPreview = ({
                   </div>
                   <audio 
                     ref={audioRef}
-                    src={demoAudioUrl}
                     preload="metadata"
                     onEnded={() => setIsPlaying(false)}
                     className="hidden"
@@ -639,7 +697,7 @@ const PodcastPreview = ({
                   <path d="M21 2v6h-6"></path>
                   <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
                   <path d="M3 22v-6h6"></path>
-                  <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+                  <path d="M21 12a9 9 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
                 </svg>
                 Reload Media
               </button>
@@ -774,7 +832,7 @@ const PodcastPreview = ({
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                         <polyline points="7 10 12 15 17 10"></polyline>
-                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                        <line x1="19" y1="5" x2="19" y2="19"></line>
                       </svg>
                       Download
                     </AnimatedButton>
@@ -829,6 +887,7 @@ const PodcastPreview = ({
             <li>The demo media will be used until your podcast is successfully generated</li>
             <li>Click "Generate Podcast" to create your AI podcast</li>
             <li>If issues persist, try the "Reload Media" button after generation</li>
+            <li>Make sure your browser supports MP4 video and MP3 audio formats</li>
           </ul>
         </div>
       )}
