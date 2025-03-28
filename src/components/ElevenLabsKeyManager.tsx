@@ -116,10 +116,10 @@ const ElevenLabsKeyManager = () => {
   };
 
   const handleToggleActivation = async (key: ElevenLabsApiKey) => {
-    if (!user) return;
+    if (!user || !key.id) return;
     
     try {
-      await updateElevenLabsApiKey(key.id!, {
+      await updateElevenLabsApiKey(key.id, {
         is_active: !key.is_active,
         user_id: user.id,
         is_local: key.is_local
@@ -218,7 +218,7 @@ const ElevenLabsKeyManager = () => {
   };
 
   const refreshQuota = async (key: ElevenLabsApiKey) => {
-    if (!user) return;
+    if (!user || !key.id) return;
     
     try {
       toast({
@@ -228,7 +228,7 @@ const ElevenLabsKeyManager = () => {
       
       const { quota_remaining } = await validateElevenLabsApiKey(key.key);
       
-      await updateElevenLabsApiKey(key.id!, {
+      await updateElevenLabsApiKey(key.id, {
         user_id: user.id,
         quota_remaining: quota_remaining,
         is_local: key.is_local

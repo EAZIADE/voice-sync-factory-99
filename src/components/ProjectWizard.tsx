@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
@@ -9,7 +8,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { useToast } from "./ui/use-toast";
-import { createProject } from "@/services/api";
+import { createProject as createProject2 } from "@/services/api";
 
 interface ProjectFormData {
   title: string;
@@ -59,15 +58,14 @@ const ProjectWizard = () => {
     setIsSubmitting(true);
     
     try {
-      // The issue is here - we need to use the language ID, not the language code
-      const project = await createProject({
+      const project = await createProject2({
         user_id: user.id,
         title: formData.title,
         description: formData.description || null,
         script: formData.script || null,
         selected_hosts: selectedHosts,
         selected_template: selectedTemplate,
-        selected_language: selectedLanguage.id, // Fixed: Use the language ID instead of the code
+        selected_language: selectedLanguage.id,
         status: 'draft'
       });
       
@@ -76,7 +74,6 @@ const ProjectWizard = () => {
         description: "Your project has been created.",
       });
       
-      // Redirect to the dashboard after successful creation
       navigate(`/project/${project.id}`);
     } catch (error) {
       console.error("Error creating project:", error);

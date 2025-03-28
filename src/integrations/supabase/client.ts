@@ -64,7 +64,7 @@ export const checkMediaFileExists = async (projectId: string, fileType: 'audio' 
   }
 };
 
-export const downloadMediaFile = async (projectId: string, fileType: 'audio' | 'video'): Promise<void> => {
+export const downloadMediaFile = async (projectId: string, fileType: 'audio' | 'video'): Promise<{success: boolean, url: string, message?: string}> => {
   try {
     const extension = fileType === 'audio' ? 'mp3' : 'mp4';
     const path = `${projectId}/${fileType}.${extension}`;
@@ -76,20 +76,23 @@ export const downloadMediaFile = async (projectId: string, fileType: 'audio' | '
     }
     
     const url = URL.createObjectURL(data);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `podcast-${fileType}-${projectId}.${extension}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    
+    return {
+      success: true,
+      url,
+      message: 'Download successful'
+    };
   } catch (error) {
     console.error(`Error downloading ${fileType} file:`, error);
-    throw new Error(`Failed to download ${fileType} file`);
+    return {
+      success: false,
+      url: '',
+      message: `Failed to download ${fileType} file: ${error.message || 'Unknown error'}`
+    };
   }
 };
 
-export const deleteMediaFile = async (projectId: string): Promise<void> => {
+export const deleteMediaFile = async (projectId: string): Promise<{success: boolean, message?: string}> => {
   try {
     // Delete both audio and video files
     const { error: audioError } = await supabase.storage
@@ -107,8 +110,16 @@ export const deleteMediaFile = async (projectId: string): Promise<void> => {
     if (videoError) {
       console.warn('Warning: Could not delete video file:', videoError);
     }
+    
+    return { 
+      success: true,
+      message: 'Media files deleted successfully'
+    };
   } catch (error) {
     console.error('Error deleting media files:', error);
-    throw new Error('Failed to delete media files');
+    return {
+      success: false,
+      message: `Failed to delete media files: ${error.message || 'Unknown error'}`
+    };
   }
 };

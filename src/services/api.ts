@@ -91,6 +91,42 @@ export const createProject = async (
   return convertToAppModel<Project>(data);
 };
 
+// Legacy project creation function for compatibility with existing code
+export const createProject2 = async (projectData: {
+  user_id: string;
+  title: string;
+  description: string | null;
+  script?: string | null;
+  selected_hosts: string[];
+  selected_template: string;
+  selected_language: string;
+  status?: string;
+}): Promise<Project> => {
+  const { data, error } = await supabase
+    .from('projects')
+    .insert([{
+      user_id: projectData.user_id,
+      title: projectData.title,
+      description: projectData.description,
+      script: projectData.script || null,
+      selected_hosts: projectData.selected_hosts,
+      selected_template: projectData.selected_template,
+      selected_language: projectData.selected_language,
+      status: projectData.status || 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }])
+    .select('*')
+    .single();
+
+  if (error) {
+    console.error('Error creating project:', error);
+    throw new Error('Failed to create project');
+  }
+
+  return convertToAppModel<Project>(data);
+};
+
 /**
  * Update an existing project
  */
