@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -16,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 // Define the status type that exactly matches the Project interface
-type ProjectStatus = Project['status']; // This will automatically pull from the Project type
+type ProjectStatus = Project['status']; 
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
