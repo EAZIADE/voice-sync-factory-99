@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -31,6 +30,18 @@ const ProjectDetail = () => {
     audio: false
   });
   const { toast: hookToast } = useToast();
+
+  // New function to safely update project status
+  const updateProjectStatus = (status: ProjectStatus) => {
+    setProject(prev => {
+      if (!prev) return null;
+      return { 
+        ...prev, 
+        status: status,
+        updated_at: new Date().toISOString()
+      };
+    });
+  };
 
   useEffect(() => {
     const loadProject = async () => {
@@ -199,14 +210,7 @@ const ProjectDetail = () => {
     setIsGenerating(true);
     setGenerationError(null);
     
-    setProject(prev => {
-      if (!prev) return null;
-      return { 
-        ...prev, 
-        status: 'processing' as ProjectStatus,
-        updated_at: new Date().toISOString()
-      };
-    });
+    updateProjectStatus('processing');
   };
 
   const handleGenerateSuccess = () => {
@@ -217,14 +221,7 @@ const ProjectDetail = () => {
     setIsGenerating(false);
     setGenerationError(errorMessage);
     
-    setProject(prev => {
-      if (!prev) return null;
-      return { 
-        ...prev, 
-        status: 'draft' as ProjectStatus,
-        updated_at: new Date().toISOString()
-      };
-    });
+    updateProjectStatus('draft');
   };
 
   const handleDeletePodcast = async () => {
@@ -244,14 +241,7 @@ const ProjectDetail = () => {
         
       if (error) throw error;
       
-      setProject(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          status: 'draft' as ProjectStatus,
-          updated_at: new Date().toISOString()
-        };
-      });
+      updateProjectStatus('draft');
       
       setMediaUrls({});
       setMediaFilesExist({
@@ -273,14 +263,7 @@ const ProjectDetail = () => {
   const handleUpdatePodcast = () => {
     if (!project?.id) return;
     
-    setProject(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        status: 'draft' as ProjectStatus,
-        updated_at: new Date().toISOString()
-      };
-    });
+    updateProjectStatus('draft');
     
     toast.info("Podcast ready for update", {
       description: "You can now make changes and regenerate your podcast."
@@ -300,14 +283,7 @@ const ProjectDetail = () => {
         
       if (error) throw error;
       
-      setProject(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          status: 'draft' as ProjectStatus,
-          updated_at: new Date().toISOString()
-        };
-      });
+      updateProjectStatus('draft');
       
       toast.success("Podcast reset successfully", {
         description: "Your podcast has been reset to draft status, but media files are still available."
