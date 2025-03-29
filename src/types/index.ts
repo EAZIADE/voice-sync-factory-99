@@ -1,4 +1,5 @@
 
+
 export interface Project {
   id: string;
   user_id: string;
@@ -62,3 +63,4 @@ export interface ElevenLabsApiKey {
   last_used?: string | null;
   quota_remaining?: number | null;
 }
+
