@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -199,7 +200,7 @@ const ProjectDetail = () => {
       if (!prev) return null;
       return { 
         ...prev, 
-        status: 'processing',
+        status: 'processing' as const,
         updated_at: new Date().toISOString()
       };
     });
@@ -217,7 +218,7 @@ const ProjectDetail = () => {
       if (!prev) return null;
       return { 
         ...prev, 
-        status: 'draft',
+        status: 'draft' as const,
         updated_at: new Date().toISOString()
       };
     });
@@ -244,7 +245,7 @@ const ProjectDetail = () => {
         if (!prev) return null;
         return {
           ...prev,
-          status: 'draft',
+          status: 'draft' as const,
           updated_at: new Date().toISOString()
         };
       });
@@ -273,7 +274,7 @@ const ProjectDetail = () => {
       if (!prev) return null;
       return {
         ...prev,
-        status: 'draft',
+        status: 'draft' as const,
         updated_at: new Date().toISOString()
       };
     });
@@ -300,7 +301,7 @@ const ProjectDetail = () => {
         if (!prev) return null;
         return {
           ...prev,
-          status: 'draft',
+          status: 'draft' as const,
           updated_at: new Date().toISOString()
         };
       });
