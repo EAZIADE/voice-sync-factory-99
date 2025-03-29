@@ -203,7 +203,7 @@ const ProjectDetail = () => {
       if (!prev) return null;
       return { 
         ...prev, 
-        status: 'processing' as const,
+        status: 'processing',
         updated_at: new Date().toISOString()
       };
     });
@@ -221,7 +221,7 @@ const ProjectDetail = () => {
       if (!prev) return null;
       return { 
         ...prev, 
-        status: 'draft' as const,
+        status: 'draft',
         updated_at: new Date().toISOString()
       };
     });
