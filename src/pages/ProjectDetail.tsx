@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -48,7 +47,7 @@ const ProjectDetail = () => {
           const projectData = convertToAppModel<Project>(data);
           setProject({
             ...projectData,
-            status: projectData.status === 'draft' || projectData.status === 'processing' || projectData.status === 'completed' 
+            status: projectData.status === 'draft' || projectData.status === 'processing' || projectData.status === 'completed' || projectData.status === 'deleted'
               ? projectData.status 
               : 'draft'
           });
@@ -117,8 +116,8 @@ const ProjectDetail = () => {
         const projectData = convertToAppModel<{status: string, updated_at: string}>(data);
         
         if (projectData && projectData.status !== project.status) {
-          const validStatus = projectData.status === 'draft' || projectData.status === 'processing' || projectData.status === 'completed' 
-              ? projectData.status as ('draft' | 'processing' | 'completed')
+          const validStatus = projectData.status === 'draft' || projectData.status === 'processing' || projectData.status === 'completed' || projectData.status === 'deleted'
+              ? projectData.status as ('draft' | 'processing' | 'completed' | 'deleted')
               : 'draft';
               
           setProject(prev => prev ? { ...prev, status: validStatus, updated_at: projectData.updated_at } : null);

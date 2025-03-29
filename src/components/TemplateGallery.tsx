@@ -1,9 +1,8 @@
-
 import React, { useState } from "react";
 import { GlassCard } from "./ui/GlassMorphism";
 import { cn } from "@/lib/utils";
 import { useAppContext } from "@/context/AppContext";
-import { Template } from "@/types";
+import { Template } from "@/types/index";
 
 const TemplateGallery = () => {
   const { templates, selectedTemplate, setSelectedTemplate, isLoading } = useAppContext();

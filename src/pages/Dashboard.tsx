@@ -1,10 +1,9 @@
-
 import React, { useEffect, useState } from "react";
 import { Navigate, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { GlassPanel, GlassCard } from "@/components/ui/GlassMorphism";
 import { AnimatedButton } from "@/components/ui/AnimatedButton";
-import { Project } from "@/types";
+import { Project } from "@/types/index";
 import { fetchProjects, deleteProject } from "@/services/api";
 import Header from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
@@ -63,12 +62,11 @@ const Dashboard = () => {
     }
   }, [user, hookToast]);
 
-  // Redirect if not logged in
   if (!loading && !user) {
     return <Navigate to="/auth" replace />;
   }
 
-  const statusBadgeClass = (status: 'draft' | 'processing' | 'completed') => {
+  const statusBadgeClass = (status: 'draft' | 'processing' | 'completed' | 'deleted') => {
     switch (status) {
       case 'draft': 
         return "bg-secondary/50 text-foreground";
@@ -76,6 +74,8 @@ const Dashboard = () => {
         return "bg-amber-500/20 text-amber-600";
       case 'completed': 
         return "bg-green-500/20 text-green-600";
+      case 'deleted':
+        return "bg-red-500/20 text-red-600";
       default: 
         return "bg-secondary/50 text-foreground";
     }
@@ -228,7 +228,6 @@ const Dashboard = () => {
         </div>
       </main>
       
-      {/* Delete Project Confirmation Dialog */}
       <AlertDialog open={!!projectToDelete} onOpenChange={(open) => !open && setProjectToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

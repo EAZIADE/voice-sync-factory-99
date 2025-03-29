@@ -1,4 +1,5 @@
 
+
 export interface Project {
   id: string;
   user_id: string;
@@ -30,6 +31,16 @@ export interface Host {
   model_id?: string;
 }
 
+export interface Template {
+  id: string;
+  name: string;
+  description: string;
+  image_url: string;
+  category: string;
+  is_premium: boolean;
+  created_at?: string;
+}
+
 export interface Language {
   id: string;
   name: string;
@@ -51,3 +62,4 @@ export interface ElevenLabsApiKey {
   last_used?: string | null;
   quota_remaining?: number | null;
 }
+

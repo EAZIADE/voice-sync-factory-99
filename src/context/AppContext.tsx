@@ -1,8 +1,7 @@
-
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchHosts, fetchTemplates, fetchLanguages } from "@/services/api";
-import { Host, Template, Language } from "@/types";
+import { Host, Template, Language } from "@/types/index";
 
 interface AppContextType {
   selectedHosts: string[];
@@ -55,7 +54,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isLoading = hostsLoading || templatesLoading || languagesLoading;
   const error = hostsError || templatesError || languagesError;
   
-  // Set English as the default language when languages are loaded
   useEffect(() => {
     if (languages.length > 0 && !selectedLanguage) {
       const englishLanguage = languages.find(lang => lang.code === 'en');

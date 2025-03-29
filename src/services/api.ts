@@ -1,5 +1,6 @@
+
 import { supabase } from "@/integrations/supabase/client";
-import { ElevenLabsApiKey, Host, Language, Project, Template } from "@/types";
+import { ElevenLabsApiKey, Host, Language, Project, Template } from "@/types/index";
 import { 
   convertToAppModel,
   asType
