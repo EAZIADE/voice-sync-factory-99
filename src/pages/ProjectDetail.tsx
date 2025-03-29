@@ -199,7 +199,7 @@ const ProjectDetail = () => {
       if (!prev) return null;
       return { 
         ...prev, 
-        status: 'processing' as 'draft' | 'processing' | 'completed' | 'deleted',
+        status: 'processing' as const,
         updated_at: new Date().toISOString()
       };
     });
@@ -217,7 +217,7 @@ const ProjectDetail = () => {
       if (!prev) return null;
       return { 
         ...prev, 
-        status: 'draft' as 'draft' | 'processing' | 'completed' | 'deleted',
+        status: 'draft' as const,
         updated_at: new Date().toISOString()
       };
     });
@@ -244,7 +244,7 @@ const ProjectDetail = () => {
         if (!prev) return null;
         return {
           ...prev,
-          status: 'draft' as 'draft' | 'processing' | 'completed' | 'deleted',
+          status: 'draft' as const,
           updated_at: new Date().toISOString()
         };
       });
@@ -273,7 +273,7 @@ const ProjectDetail = () => {
       if (!prev) return null;
       return {
         ...prev,
-        status: 'draft' as 'draft' | 'processing' | 'completed' | 'deleted',
+        status: 'draft' as const,
         updated_at: new Date().toISOString()
       };
     });
@@ -300,7 +300,7 @@ const ProjectDetail = () => {
         if (!prev) return null;
         return {
           ...prev,
-          status: 'draft' as 'draft' | 'processing' | 'completed' | 'deleted',
+          status: 'draft' as const,
           updated_at: new Date().toISOString()
         };
       });
