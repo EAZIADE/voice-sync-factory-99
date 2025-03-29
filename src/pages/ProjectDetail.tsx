@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -14,8 +15,8 @@ import { asType, convertToAppModel, ensureValidStatus } from "@/utils/typeUtils"
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
-// Define the status type to match the Project interface
-type ProjectStatus = 'draft' | 'processing' | 'completed' | 'deleted';
+// Define the status type that exactly matches the Project interface
+type ProjectStatus = Project['status']; // This will automatically pull from the Project type
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
