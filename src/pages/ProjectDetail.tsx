@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -16,7 +15,8 @@ import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 // Define the status type that exactly matches the Project interface
-type ProjectStatus = 'draft' | 'processing' | 'completed'; // Removed 'deleted' to match error message
+// Only including the statuses we actually use in this component
+type ProjectStatus = 'draft' | 'processing' | 'completed';
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -242,9 +242,7 @@ const ProjectDetail = () => {
         
       if (error) throw error;
       
-      // Commenting out the problematic line that was causing the TypeScript error
-      // updateProjectStatus('deleted');
-      // Instead, use 'draft' which is valid for ProjectStatus type
+      // Instead of 'deleted', use 'draft' which is valid for ProjectStatus type
       updateProjectStatus('draft');
       
       setMediaUrls({});
