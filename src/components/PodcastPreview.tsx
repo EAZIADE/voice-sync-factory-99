@@ -61,8 +61,8 @@ const PodcastPreview = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   
-  const demoVideoUrl = "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
-  const demoAudioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
+  const demoVideoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+  const demoAudioUrl = "https://s3.amazonaws.com/exp-us-standard/audio/playlist-example/Comfort_Fit_-_03_-_Sorry.mp3";
   
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   
@@ -118,6 +118,8 @@ const PodcastPreview = ({
       setIsMediaLoading(true);
       
       try {
+        await refreshSession();
+        
         console.log(`Attempting to get media for project: ${projectId}`);
         
         const videoBlob = await downloadMediaBlob(projectId, 'video');
@@ -168,7 +170,7 @@ const PodcastPreview = ({
       } catch (error) {
         console.error("Error loading media for project:", error);
         toast("Media loading failed", {
-          description: "There was an error loading your podcast media."
+          description: "There was an error loading your podcast media. Try refreshing the page or clicking the 'Reload Media' button."
         });
       } finally {
         setIsMediaLoading(false);
@@ -591,7 +593,7 @@ const PodcastPreview = ({
         });
       } else {
         toast("Using demo media", {
-          description: "Using built-in demo media as a fallback"
+          description: "Using built-in demo media as a fallback. Your podcast may still be processing or there was an issue with the generation."
         });
       }
     } catch (error) {
@@ -834,7 +836,7 @@ const PodcastPreview = ({
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                         <polyline points="7 10 12 15 17 10"></polyline>
-                        <line x1="19" y1="5" x2="19" y2="19"></line>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
                       </svg>
                       Download
                     </AnimatedButton>
@@ -890,6 +892,7 @@ const PodcastPreview = ({
             <li>Wait a few more minutes - sometimes media files take time to become available</li>
             <li>Make sure your browser supports MP4 video and MP3 audio formats</li>
             <li>Check that your browser isn't blocking media content</li>
+            <li>Try refreshing the page</li>
           </ul>
         </div>
       )}
@@ -904,6 +907,7 @@ const PodcastPreview = ({
             <li>Try regenerating with different settings</li>
             <li>Check your ElevenLabs API key is valid</li>
             <li>Try again later if service is busy</li>
+            <li>Make sure you are logged in</li>
           </ul>
         </div>
       )}

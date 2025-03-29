@@ -70,7 +70,7 @@ serve(async (req: Request) => {
     }
     
     // Create a Supabase client with the auth header
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || "https://cvfqcvytoobplgracobg.supabase.co";
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
     
     console.log("Supabase URL available:", !!supabaseUrl);
@@ -99,13 +99,39 @@ serve(async (req: Request) => {
     );
     
     // First verify the project exists and belongs to the user
-    let projectData;
+    let projectData, user;
     try {
       console.log("Fetching project data for ID:", projectId);
+      
+      // Get authenticated user information first
+      console.log("Getting authenticated user");
+      const { data: userData, error: userError } = await supabaseClient.auth.getUser();
+      
+      if (userError) {
+        console.error("User auth error:", userError);
+        return new Response(
+          JSON.stringify({ error: `User authentication error: ${userError.message}` }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      if (!userData.user) {
+        console.error("No authenticated user found");
+        return new Response(
+          JSON.stringify({ error: "Not authenticated. Please log in again." }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      user = userData.user;
+      console.log("Authenticated user ID:", user.id);
+      
+      // Now fetch the project
       const { data, error } = await supabaseClient
         .from('projects')
         .select('*, selected_hosts')
         .eq('id', projectId)
+        .eq('user_id', user.id)
         .single();
         
       if (error) {
@@ -126,28 +152,6 @@ serve(async (req: Request) => {
       
       projectData = data;
       console.log("Project data retrieved:", projectData);
-      
-      // Get authenticated user information
-      console.log("Getting authenticated user");
-      const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-      
-      if (userError) {
-        console.error("User auth error:", userError);
-        return new Response(
-          JSON.stringify({ error: `User authentication error: ${userError.message}` }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      if (!user) {
-        console.error("No authenticated user found");
-        return new Response(
-          JSON.stringify({ error: "Not authenticated. Please log in again." }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      console.log("Authenticated user ID:", user.id);
       console.log("Project user ID:", projectData.user_id);
       
       // Verify user owns this project

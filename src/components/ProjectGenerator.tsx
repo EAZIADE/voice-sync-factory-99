@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Project } from "@/types";
 import { useAuth } from "@/context/AuthContext";
@@ -98,7 +97,7 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
   };
 
   const handleGeneratePodcast = async () => {
-    if (!user || !session || !project.id) {
+    if (!user) {
       toast("Not authenticated", {
         description: "Please log in to generate a podcast"
       });
@@ -120,26 +119,10 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
       return;
     }
     
-    // Make sure we have a valid session token
-    const isValid = await refreshSession();
-    if (!isValid) {
-      toast("Session expired", {
-        description: "Your session has expired. Please log in again."
-      });
-      return;
-    }
-    
     setIsGenerating(true);
     onGenerateStart();
     
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cvfqcvytoobplgracobg.supabase.co';
-      
-      console.log("Generating podcast with URL:", `${supabaseUrl}/functions/v1/generate-podcast`);
-      console.log("Project ID:", project.id);
-      console.log("Character controls:", characterControls);
-      console.log("Selected hosts:", project.selected_hosts);
-      
       // IMPORTANT: Force a session refresh before making the API call
       const { data: authData, error: authError } = await supabase.auth.refreshSession();
       if (authError || !authData.session) {
@@ -148,8 +131,12 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
       }
       
       const currentSession = authData.session;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cvfqcvytoobplgracobg.supabase.co';
       
-      // Explicitly log the token we're about to use
+      console.log("Generating podcast with URL:", `${supabaseUrl}/functions/v1/generate-podcast`);
+      console.log("Project ID:", project.id);
+      console.log("Character controls:", characterControls);
+      console.log("Selected hosts:", project.selected_hosts);
       console.log("Using refreshed access token:", currentSession.access_token ? "Present and refreshed" : "Missing after refresh");
       
       // Try direct fetch with explicit authentication from the refreshed session
