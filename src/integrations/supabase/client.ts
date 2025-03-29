@@ -202,3 +202,65 @@ export const deleteMediaFile = async (projectId: string, userId: string): Promis
     return false;
   }
 };
+
+// Add the missing functions
+export const getMediaUrl = (projectId: string, type: 'audio' | 'video'): string => {
+  const fileExtension = type === 'video' ? 'mp4' : 'mp3';
+  return `${supabaseUrl}/storage/v1/object/public/media/podcast_outputs/${projectId}/${type}.${fileExtension}`;
+};
+
+export const checkMediaFileExists = async (projectId: string, type: 'audio' | 'video'): Promise<boolean> => {
+  try {
+    const fileExtension = type === 'video' ? 'mp4' : 'mp3';
+    const filePath = `podcast_outputs/${projectId}/${type}.${fileExtension}`;
+    
+    // Check if file exists in Supabase storage
+    const { data, error } = await supabase.storage
+      .from('media')
+      .list(filePath.split('/').slice(0, -1).join('/'));
+    
+    if (error) {
+      console.error(`Error checking if ${type} file exists:`, error);
+      return false;
+    }
+    
+    // Check if any files match the expected filename
+    return !!data?.some(file => file.name === `${type}.${fileExtension}`);
+  } catch (error) {
+    console.error(`Exception checking if ${type} file exists:`, error);
+    return false;
+  }
+};
+
+export const ensurePodcastsBucketExists = async (): Promise<boolean> => {
+  try {
+    // Check if the media bucket exists
+    const { data, error } = await supabase.storage.getBucket('media');
+    
+    if (error) {
+      console.error("Error checking media bucket:", error);
+      
+      // If the bucket doesn't exist, try to create it
+      if (error.message.includes('not found')) {
+        const { data: createData, error: createError } = await supabase.storage.createBucket('media', {
+          public: true
+        });
+        
+        if (createError) {
+          console.error("Error creating media bucket:", createError);
+          return false;
+        }
+        
+        console.log("Media bucket created successfully");
+        return true;
+      }
+      
+      return false;
+    }
+    
+    return !!data;
+  } catch (error) {
+    console.error("Exception ensuring media bucket exists:", error);
+    return false;
+  }
+};

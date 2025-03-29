@@ -1,4 +1,3 @@
-
 export interface Project {
   id: string;
   user_id: string;
@@ -16,6 +15,7 @@ export interface Project {
   storage_path?: string;
   generation_error?: string | null;
   character_controls?: Record<string, any>;
+  script?: string;
 }
 
 export interface Host {

@@ -228,12 +228,12 @@ const ProjectDetail = () => {
   };
 
   const handleDeletePodcast = async () => {
-    if (!project?.id) return;
+    if (!project?.id || !user?.id) return;
     
     try {
       toast.info("Deleting podcast...");
       
-      await deleteMediaFile(project.id);
+      await deleteMediaFile(project.id, user.id);
       
       const { error } = await supabase
         .from('projects')
