@@ -6,15 +6,15 @@ import {
   ToastProps
 } from "@/components/ui/toast";
 
+const TOAST_LIMIT = 20;
+const TOAST_REMOVE_DELAY = 1000000;
+
 type ToasterToast = ToastProps & {
   id: string;
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: ToastActionElement;
 };
-
-const TOAST_LIMIT = 20;
-const TOAST_REMOVE_DELAY = 1000000;
 
 type ToasterState = {
   toasts: ToasterToast[];
@@ -136,7 +136,34 @@ interface ToasterToastProps extends Partial<ToasterToast> {
 
 const toastInitialState: ToasterState = { toasts: [] };
 
-const [state, dispatch] = React.useReducer(reducer, toastInitialState);
+// Create a React context to store the toast state and dispatch
+type ToastContextType = {
+  state: ToasterState;
+  dispatch: React.Dispatch<Action>;
+} | undefined;
+
+const ToastContext = React.createContext<ToastContextType>(undefined);
+
+// This should be moved outside of component scope
+let dispatch: React.Dispatch<Action>;
+
+// Provider component that will wrap the app
+export function ToastProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [state, dispatchAction] = React.useReducer(reducer, toastInitialState);
+  
+  // Store the dispatch function in our module-level variable so toast functions can use it
+  dispatch = dispatchAction;
+
+  return (
+    <ToastContext.Provider value={{ state, dispatch: dispatchAction }}>
+      {children}
+    </ToastContext.Provider>
+  );
+}
 
 export const useToast = () => {
   const toast = (props: ToasterToastProps) => {
@@ -169,8 +196,17 @@ export const useToast = () => {
     toast,
     dismiss: (toastId?: string) =>
       dispatch({ type: actionTypes.DISMISS_TOAST, toastId }),
-    toasts: state.toasts,
+    toasts: toastInitialState.toasts,
   };
+};
+
+// This hook is used by the Toaster component to get the toast state
+export const useToastContext = () => {
+  const context = React.useContext(ToastContext);
+  if (context === undefined) {
+    throw new Error("useToastContext must be used within a ToastProvider");
+  }
+  return context;
 };
 
 export type { ToasterToast, ToasterToastProps };
