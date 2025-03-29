@@ -1,7 +1,8 @@
+
 import React, { useEffect, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Project } from "@/types";
+import { Project } from "@/types/index";
 import { GlassPanel } from "@/components/ui/GlassMorphism";
 import { AnimatedButton } from "@/components/ui/AnimatedButton";
 import Header from "@/components/Header";
