@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from "react";
 import { GlassCard, GlassPanel } from "./ui/GlassMorphism";
 import { AnimatedButton } from "./ui/AnimatedButton";
@@ -81,6 +82,7 @@ const PodcastPreview = ({
     checkAuth();
   }, []);
 
+  // Use correct media sources based on status
   const videoSource = status === 'completed' && previewUrl ? 
     (localMediaUrls.video || previewUrl) : demoVideoUrl;
   const audioSource = status === 'completed' && audioUrl ? 
@@ -96,24 +98,47 @@ const PodcastPreview = ({
         previewUrl, 
         audioUrl,
         localVideoUrl: localMediaUrls.video,
-        localAudioUrl: localMediaUrls.audio
+        localAudioUrl: localMediaUrls.audio,
+        status
       });
     }
   }, [status, previewUrl, audioUrl, localMediaUrls]);
 
+  // Clear and load the proper media sources when project is ready
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.src = demoVideoUrl;
-      videoRef.current.load();
+      if (status !== 'completed' || !projectId) {
+        videoRef.current.src = demoVideoUrl;
+        videoRef.current.load();
+      } else if (localMediaUrls.video) {
+        console.log("Loading video from local URL:", localMediaUrls.video);
+        videoRef.current.src = localMediaUrls.video;
+        videoRef.current.load();
+      } else if (previewUrl) {
+        console.log("Loading video from preview URL:", previewUrl);
+        videoRef.current.src = previewUrl;
+        videoRef.current.load();
+      }
     }
     
     if (audioRef.current) {
-      audioRef.current.src = demoAudioUrl;
-      audioRef.current.load();
+      if (status !== 'completed' || !projectId) {
+        audioRef.current.src = demoAudioUrl;
+        audioRef.current.load();
+      } else if (localMediaUrls.audio) {
+        console.log("Loading audio from local URL:", localMediaUrls.audio);
+        audioRef.current.src = localMediaUrls.audio;
+        audioRef.current.load();
+      } else if (audioUrl) {
+        console.log("Loading audio from audio URL:", audioUrl);
+        audioRef.current.src = audioUrl;
+        audioRef.current.load();
+      }
     }
     
     if (status !== 'completed' || !projectId) return;
     
+    // Load media files for completed projects
     const loadMediaForProject = async () => {
       setIsMediaLoading(true);
       
@@ -122,6 +147,7 @@ const PodcastPreview = ({
         
         console.log(`Attempting to get media for project: ${projectId}`);
         
+        // First try to get video blob directly
         const videoBlob = await downloadMediaBlob(projectId, 'video');
         if (videoBlob && videoBlob.size > 0) {
           const videoUrl = URL.createObjectURL(videoBlob);
@@ -133,6 +159,7 @@ const PodcastPreview = ({
             videoRef.current.load();
           }
         } else {
+          // Fall back to signed URL if blob doesn't work
           const signedVideoUrl = await getSignedUrl(projectId, 'video');
           if (signedVideoUrl) {
             console.log("Got signed video URL:", signedVideoUrl);
@@ -145,6 +172,7 @@ const PodcastPreview = ({
           }
         }
         
+        // Then try to get audio blob directly
         const audioBlob = await downloadMediaBlob(projectId, 'audio');
         if (audioBlob && audioBlob.size > 0) {
           const audioUrl = URL.createObjectURL(audioBlob);
@@ -156,6 +184,7 @@ const PodcastPreview = ({
             audioRef.current.load();
           }
         } else {
+          // Fall back to signed URL if blob doesn't work
           const signedAudioUrl = await getSignedUrl(projectId, 'audio');
           if (signedAudioUrl) {
             console.log("Got signed audio URL:", signedAudioUrl);
@@ -178,8 +207,9 @@ const PodcastPreview = ({
     };
     
     loadMediaForProject();
-  }, [status, projectId, demoVideoUrl, demoAudioUrl]);
+  }, [status, projectId, demoVideoUrl, demoAudioUrl, previewUrl, audioUrl, localMediaUrls.video, localMediaUrls.audio]);
 
+  // Handle play/pause functionality
   useEffect(() => {
     let interval: NodeJS.Timeout;
     
@@ -275,6 +305,7 @@ const PodcastPreview = ({
     };
   }, [isPlaying, mediaType, demoVideoUrl, demoAudioUrl]);
 
+  // Handle metadata loading and errors
   useEffect(() => {
     const handleLoadedMetadata = (e: Event) => {
       const target = e.target as HTMLMediaElement;
@@ -393,7 +424,10 @@ const PodcastPreview = ({
     }
   };
   
+  // Fixed download function
   const handleDownload = async () => {
+    console.log("Download requested. Status:", status, "Project ID:", projectId);
+    
     if (status !== 'completed') {
       toast.error("Podcast not ready", {
         description: "Please generate the podcast first before downloading."
@@ -426,6 +460,7 @@ const PodcastPreview = ({
     });
     
     try {
+      // Check if we have local blob URLs first
       if (mediaType === 'video' && localMediaUrls.video && localMediaUrls.video.startsWith('blob:')) {
         const a = document.createElement('a');
         a.href = localMediaUrls.video;
@@ -460,6 +495,7 @@ const PodcastPreview = ({
         return;
       }
       
+      // Use the download service as a fallback
       const result = await downloadMediaFile(projectId, mediaType);
       
       if (!result.success) {
@@ -532,6 +568,7 @@ const PodcastPreview = ({
     setAudioError(null);
     setLoadAttempts(0);
     
+    // Clean up any existing blob URLs
     if (localMediaUrls.video && localMediaUrls.video.startsWith('blob:')) {
       URL.revokeObjectURL(localMediaUrls.video);
     }

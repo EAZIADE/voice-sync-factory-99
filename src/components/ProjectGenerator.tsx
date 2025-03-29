@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Project } from "@/types";
 import { useAuth } from "@/context/AuthContext";
@@ -67,143 +68,178 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
 
       const processedContent = await processContentSource(source, user.id);
       
+      // Update project with processed content
       const { error } = await supabase
         .from('projects')
         .update({ 
-          script: processedContent,
+          source_content: processedContent.content,
+          source_type: source.type,
           updated_at: new Date().toISOString()
-        } as any)
-        .eq('id', project.id as any);
-        
+        })
+        .eq('id', project.id)
+        .eq('user_id', user.id);
+      
       if (error) {
-        throw error;
+        console.error("Error updating project with source content:", error);
+        toast("Error saving content", {
+          description: "There was a problem saving your content. Please try again."
+        });
+        return;
       }
       
       toast("Content processed", {
-        description: "Your content has been processed and is ready for podcast generation"
+        description: "Your content has been processed and is ready for podcast generation."
       });
       
     } catch (error) {
       console.error("Error processing content source:", error);
-      toast("Processing error", {
-        description: "Failed to process content. Please try again."
+      toast("Content processing error", {
+        description: "There was a problem processing your content. Please try a different source."
       });
     } finally {
       setIsProcessingSource(false);
     }
   };
 
-  const handleGeneratePodcast = async () => {
+  const handleControlsChange = (controls: CharacterControlState) => {
+    setCharacterControls(controls);
+  };
+
+  const handleGenerate = async () => {
     if (!user) {
       toast("Not authenticated", {
-        description: "Please log in to generate a podcast"
+        description: "Please log in to generate podcasts"
       });
       return;
     }
-
+    
     if (!hasActiveApiKey) {
-      toast("API Key Required", {
-        description: "Please add a valid ElevenLabs API key with available character quota in your dashboard settings."
+      toast("API key required", {
+        description: "Please add a valid ElevenLabs API key to generate podcasts"
+      });
+      return;
+    }
+    
+    if (!project.source_content) {
+      toast("Content required", {
+        description: "Please select a content source before generating"
       });
       return;
     }
     
     if (!project.selected_hosts || project.selected_hosts.length === 0) {
-      toast("Host Required", {
-        description: "Please select at least one host for your podcast."
+      toast("Host required", {
+        description: "Please select at least one host for your podcast"
       });
       return;
     }
     
-    setIsGenerating(true);
-    onGenerateStart();
+    if (!project.selected_language) {
+      toast("Language required", {
+        description: "Please select a language for your podcast"
+      });
+      return;
+    }
     
     try {
-      const { data: currentSessionData, error: sessionError } = await supabase.auth.getSession();
+      setIsGenerating(true);
+      onGenerateStart();
       
-      if (sessionError) {
-        console.error("Session retrieval error:", sessionError);
-        throw new Error("Authentication error: Could not retrieve your session. Please try logging in again.");
+      // Update project status to 'processing'
+      const updateResult = await supabase
+        .from('projects')
+        .update({
+          status: 'processing',
+          character_controls: characterControls,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', project.id)
+        .eq('user_id', user.id);
+      
+      if (updateResult.error) {
+        console.error("Error updating project status:", updateResult.error);
+        throw new Error("Failed to update project status");
       }
       
-      if (!currentSessionData.session) {
-        console.log("No active session found, attempting to refresh");
-        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-        
-        if (refreshError || !refreshData.session) {
-          console.error("Session refresh failed:", refreshError);
-          throw new Error("Authentication error: Your session has expired. Please log in again.");
-        }
-      }
-      
-      const { data: authData, error: authError } = await supabase.auth.getSession();
-      
-      if (authError || !authData.session) {
-        console.error("Final session check failed:", authError);
-        throw new Error("Authentication error: Session retrieval failed. Please log in again.");
-      }
-      
-      const accessToken = authData.session.access_token;
-      console.log("Using access token:", accessToken ? "Present and valid" : "Missing or invalid");
-      
-      if (!accessToken) {
-        throw new Error("Authentication error: Missing access token. Please log in again.");
-      }
-      
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cvfqcvytoobplgracobg.supabase.co';
-      
-      console.log("Generating podcast with URL:", `${supabaseUrl}/functions/v1/generate-podcast`);
-      console.log("Project ID:", project.id);
-      console.log("Character controls:", characterControls);
-      console.log("Selected hosts:", project.selected_hosts);
-      console.log("Using access token:", accessToken ? "Present and valid" : "Missing or invalid");
-      
-      const response = await fetch(`${supabaseUrl}/functions/v1/generate-podcast`, {
+      // Make API call to start podcast generation
+      const response = await fetch('/api/generate-podcast', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
+          'Authorization': `Bearer ${session?.access_token}`
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           projectId: project.id,
-          characterControls
+          content: project.source_content,
+          hostIds: project.selected_hosts,
+          languageId: project.selected_language,
+          controls: characterControls
         })
       });
       
+      // Check for successful response
       if (!response.ok) {
-        let errorMessage = 'Failed to generate podcast';
-        
-        try {
-          const errorText = await response.text();
-          console.error("Error response text:", errorText);
-          
-          try {
-            const errorJson = JSON.parse(errorText);
-            errorMessage = errorJson.error || errorMessage;
-          } catch (jsonError) {
-            errorMessage = errorText || errorMessage;
-          }
-        } catch (textError) {
-          console.error("Could not read error response text:", textError);
-        }
-        
-        throw new Error(errorMessage);
+        const errorText = await response.text();
+        console.error("Generation API error:", errorText);
+        throw new Error(`API error: ${response.statusText}`);
       }
       
-      const data = await response.json();
-      console.log("Generation response:", data);
+      const result = await response.json();
       
-      toast("Podcast generation started", {
-        description: "Your AI podcast is being generated. This may take a few minutes."
+      // Update project with generation info
+      const mediaUrlsUpdate = await supabase
+        .from('projects')
+        .update({
+          status: 'completed',
+          video_url: result.videoUrl || '',
+          audio_url: result.audioUrl || '',
+          storage_path: result.storagePath || '',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', project.id)
+        .eq('user_id', user.id);
+      
+      if (mediaUrlsUpdate.error) {
+        console.error("Error updating project with media URLs:", mediaUrlsUpdate.error);
+        throw new Error("Failed to update project with media URLs");
+      }
+      
+      // Get the updated project to make sure we have the latest data
+      const { data: updatedProject, error: fetchError } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', project.id)
+        .eq('user_id', user.id)
+        .single();
+      
+      if (fetchError) {
+        console.error("Error fetching updated project:", fetchError);
+      } else {
+        console.log("Updated project after generation:", updatedProject);
+      }
+      
+      toast("Podcast generated", {
+        description: "Your podcast has been successfully generated!"
       });
       
       onGenerateSuccess();
-      
     } catch (error) {
       console.error("Error generating podcast:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to generate podcast";
       
-      toast("Generation error", {
+      // Update project status to 'draft' on error
+      await supabase
+        .from('projects')
+        .update({
+          status: 'draft',
+          generation_error: error instanceof Error ? error.message : "Unknown error during generation",
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', project.id)
+        .eq('user_id', user.id);
+      
+      const errorMessage = error instanceof Error ? error.message : "Failed to generate podcast. Please try again.";
+      
+      toast("Generation failed", {
         description: errorMessage
       });
       
@@ -212,55 +248,34 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
       setIsGenerating(false);
     }
   };
-  
-  const handleControlsChange = (controls: CharacterControlState) => {
-    setCharacterControls(controls);
-  };
-  
+
   return (
-    <div className="space-y-6">
-      <ContentSourceInput 
+    <div className="space-y-8">
+      <ContentSourceInput
         onSourceSelected={handleSourceSelected}
         isProcessing={isProcessingSource}
       />
       
       <CharacterControls onControlsChange={handleControlsChange} />
       
-      <div className="mt-6">
+      <div className="flex justify-end">
         <button
-          className="w-full bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl disabled:opacity-70 disabled:cursor-not-allowed"
-          onClick={handleGeneratePodcast}
-          disabled={isGenerating || !project.script || !hasActiveApiKey || !project.selected_hosts || project.selected_hosts.length === 0}
+          onClick={handleGenerate}
+          disabled={isGenerating || isProcessingSource || !hasActiveApiKey}
+          className="px-6 py-3 bg-gradient-to-r from-primary to-accent text-white rounded-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isGenerating ? (
-            <div className="flex items-center justify-center">
-              <svg className="animate-spin h-5 w-5 mr-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Generating your AI podcast...
-            </div>
-          ) : !hasActiveApiKey ? (
-            "Add ElevenLabs API Key to Generate Podcast"
-          ) : !project.selected_hosts || project.selected_hosts.length === 0 ? (
-            "Select at least one host"
-          ) : (
-            "Generate AI Podcast"
-          )}
+          {isGenerating ? "Generating..." : "Generate Podcast"}
         </button>
-        
-        {!hasActiveApiKey && (
-          <p className="text-sm text-amber-500 mt-2 text-center">
-            You need to add a valid ElevenLabs API key with available character quota in your dashboard settings.
-          </p>
-        )}
-        
-        {(!project.selected_hosts || project.selected_hosts.length === 0) && hasActiveApiKey && (
-          <p className="text-sm text-amber-500 mt-2 text-center">
-            Please select at least one host for your podcast in the host selection step.
-          </p>
-        )}
       </div>
+      
+      {!hasActiveApiKey && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-md">
+          <h3 className="text-sm font-medium text-amber-800">API Key Required</h3>
+          <p className="mt-1 text-xs text-amber-700">
+            You need to add an ElevenLabs API key to generate podcasts. Go to the API Key Manager to add one.
+          </p>
+        </div>
+      )}
     </div>
   );
 };
