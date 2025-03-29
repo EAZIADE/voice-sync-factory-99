@@ -3,7 +3,7 @@ import { Project } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { CharacterControlState } from "./CharacterControls";
 import { ContentSource, processContentSource } from "@/utils/contentSourceProcessing";
-import { supabase, refreshSession } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import CharacterControls from "./CharacterControls";
 import ContentSourceInput from "./ContentSourceInput";
@@ -38,7 +38,6 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
   const { toast: hookToast } = useToast();
 
   useEffect(() => {
-    // Check if user has active ElevenLabs API key
     const checkApiKey = async () => {
       if (!user) return;
       
@@ -66,10 +65,8 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
       setIsProcessingSource(true);
       setContentSource(source);
 
-      // Process the content source to get script text
       const processedContent = await processContentSource(source, user.id);
       
-      // Update the project with the processed content as script
       const { error } = await supabase
         .from('projects')
         .update({ 
@@ -111,7 +108,6 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
       return;
     }
     
-    // Make sure the selected hosts are valid
     if (!project.selected_hosts || project.selected_hosts.length === 0) {
       toast("Host Required", {
         description: "Please select at least one host for your podcast."
@@ -123,28 +119,50 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
     onGenerateStart();
     
     try {
-      // IMPORTANT: Force a session refresh before making the API call
-      const { data: authData, error: authError } = await supabase.auth.refreshSession();
-      if (authError || !authData.session) {
-        console.error("Auth refresh failed:", authError);
-        throw new Error("Authentication refresh failed. Please try logging in again.");
+      const { data: currentSessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error("Session retrieval error:", sessionError);
+        throw new Error("Authentication error: Could not retrieve your session. Please try logging in again.");
       }
       
-      const currentSession = authData.session;
+      if (!currentSessionData.session) {
+        console.log("No active session found, attempting to refresh");
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        
+        if (refreshError || !refreshData.session) {
+          console.error("Session refresh failed:", refreshError);
+          throw new Error("Authentication error: Your session has expired. Please log in again.");
+        }
+      }
+      
+      const { data: authData, error: authError } = await supabase.auth.getSession();
+      
+      if (authError || !authData.session) {
+        console.error("Final session check failed:", authError);
+        throw new Error("Authentication error: Session retrieval failed. Please log in again.");
+      }
+      
+      const accessToken = authData.session.access_token;
+      console.log("Using access token:", accessToken ? "Present and valid" : "Missing or invalid");
+      
+      if (!accessToken) {
+        throw new Error("Authentication error: Missing access token. Please log in again.");
+      }
+      
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://cvfqcvytoobplgracobg.supabase.co';
       
       console.log("Generating podcast with URL:", `${supabaseUrl}/functions/v1/generate-podcast`);
       console.log("Project ID:", project.id);
       console.log("Character controls:", characterControls);
       console.log("Selected hosts:", project.selected_hosts);
-      console.log("Using refreshed access token:", currentSession.access_token ? "Present and refreshed" : "Missing after refresh");
+      console.log("Using access token:", accessToken ? "Present and valid" : "Missing or invalid");
       
-      // Try direct fetch with explicit authentication from the refreshed session
       const response = await fetch(`${supabaseUrl}/functions/v1/generate-podcast`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentSession.access_token}`
+          'Authorization': `Bearer ${accessToken}`
         },
         body: JSON.stringify({ 
           projectId: project.id,

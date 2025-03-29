@@ -1,4 +1,3 @@
-
 // Function to generate AI podcasts with character animation using ElevenLabs API
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.23.0";
@@ -69,6 +68,13 @@ serve(async (req: Request) => {
       );
     }
     
+    // Log the token format (without exposing the actual token)
+    console.log("Token format check:", {
+      length: token.length,
+      startsWithEy: token.startsWith('ey'),
+      hasTwoDots: token.split('.').length === 3
+    });
+    
     // Create a Supabase client with the auth header
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || "https://cvfqcvytoobplgracobg.supabase.co";
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
@@ -83,7 +89,7 @@ serve(async (req: Request) => {
       );
     }
     
-    // Create a Supabase client that explicitly provides the token
+    // Create a Supabase client with explicit auth
     const supabaseClient = createClient(
       supabaseUrl,
       supabaseAnonKey,
@@ -98,40 +104,35 @@ serve(async (req: Request) => {
       }
     );
     
-    // First verify the project exists and belongs to the user
-    let projectData, user;
+    // First verify the token is valid and get the user
     try {
-      console.log("Fetching project data for ID:", projectId);
-      
-      // Get authenticated user information first
-      console.log("Getting authenticated user");
+      console.log("Getting user from JWT token");
       const { data: userData, error: userError } = await supabaseClient.auth.getUser();
       
       if (userError) {
         console.error("User auth error:", userError);
         return new Response(
-          JSON.stringify({ error: `User authentication error: ${userError.message}` }),
+          JSON.stringify({ error: `Authentication error: ${userError.message}` }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
       if (!userData.user) {
-        console.error("No authenticated user found");
+        console.error("No user found from token");
         return new Response(
-          JSON.stringify({ error: "Not authenticated. Please log in again." }),
+          JSON.stringify({ error: "Authentication error: Invalid session. Please log in again." }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
-      user = userData.user;
-      console.log("Authenticated user ID:", user.id);
+      console.log("Successfully authenticated user:", userData.user.id);
       
       // Now fetch the project
       const { data, error } = await supabaseClient
         .from('projects')
         .select('*, selected_hosts')
         .eq('id', projectId)
-        .eq('user_id', user.id)
+        .eq('user_id', userData.user.id)
         .single();
         
       if (error) {
@@ -150,24 +151,17 @@ serve(async (req: Request) => {
         );
       }
       
-      projectData = data;
+      const projectData = data;
       console.log("Project data retrieved:", projectData);
       console.log("Project user ID:", projectData.user_id);
       
       // Verify user owns this project
-      if (projectData.user_id !== user.id) {
+      if (projectData.user_id !== userData.user.id) {
         return new Response(
           JSON.stringify({ error: "You don't have permission to access this project" }),
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-    } catch (authError) {
-      console.error("Authentication verification error:", authError);
-      return new Response(
-        JSON.stringify({ error: `Authentication error: ${authError.message}` }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
     
     // Make sure project has selected hosts
     if (!projectData.selected_hosts || projectData.selected_hosts.length === 0) {
@@ -182,7 +176,7 @@ serve(async (req: Request) => {
     const { data: keys, error: keysError } = await supabaseClient
       .from('elevenlabs_api_keys')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userData.user.id)
       .eq('is_active', true)
       .order('created_at', { ascending: false });
       
@@ -284,7 +278,7 @@ serve(async (req: Request) => {
           const { data: keysData, error: keysDataError } = await supabaseClient
             .from('elevenlabs_api_keys')
             .select('*')
-            .eq('user_id', user.id)
+            .eq('user_id', userData.user.id)
             .order('created_at', { ascending: false });
             
           if (keysDataError || !keysData || keysData.length <= currentKeyIndex) {
