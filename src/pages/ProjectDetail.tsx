@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -14,8 +15,8 @@ import { asType, convertToAppModel, ensureValidStatus } from "@/utils/typeUtils"
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
-// Define the status type that exactly matches the Project interface
-// Only including the statuses we actually use in this component
+// Define the status type that exactly matches the allowed statuses we use in this component
+// Using a subset of the Project status type
 type ProjectStatus = 'draft' | 'processing' | 'completed';
 
 const ProjectDetail = () => {
@@ -242,7 +243,7 @@ const ProjectDetail = () => {
         
       if (error) throw error;
       
-      // Instead of 'deleted', use 'draft' which is valid for ProjectStatus type
+      // Use 'draft' status instead of 'deleted'
       updateProjectStatus('draft');
       
       setMediaUrls({});
