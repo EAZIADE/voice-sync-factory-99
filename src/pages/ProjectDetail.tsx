@@ -10,7 +10,7 @@ import { supabase, getMediaUrl, checkMediaFileExists, ensurePodcastsBucketExists
 import PodcastPreview from "@/components/PodcastPreview";
 import ProjectGenerator from "@/components/ProjectGenerator";
 import { toast } from "sonner";
-import { asType, convertToAppModel } from "@/utils/typeUtils";
+import { asType, convertToAppModel, ensureValidStatus } from "@/utils/typeUtils";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
@@ -47,9 +47,7 @@ const ProjectDetail = () => {
           const projectData = convertToAppModel<Project>(data);
           setProject({
             ...projectData,
-            status: projectData.status === 'draft' || projectData.status === 'processing' || projectData.status === 'completed' || projectData.status === 'deleted'
-              ? projectData.status 
-              : 'draft'
+            status: ensureValidStatus(projectData.status)
           });
           
           if (projectData.status === 'completed') {
@@ -116,10 +114,8 @@ const ProjectDetail = () => {
         const projectData = convertToAppModel<{status: string, updated_at: string}>(data);
         
         if (projectData && projectData.status !== project.status) {
-          const validStatus = projectData.status === 'draft' || projectData.status === 'processing' || projectData.status === 'completed' || projectData.status === 'deleted'
-              ? projectData.status as ('draft' | 'processing' | 'completed' | 'deleted')
-              : 'draft';
-              
+          const validStatus = ensureValidStatus(projectData.status);
+          
           setProject(prev => prev ? { ...prev, status: validStatus, updated_at: projectData.updated_at } : null);
           
           if (projectData.status === 'completed') {
@@ -203,7 +199,7 @@ const ProjectDetail = () => {
       if (!prev) return null;
       return { 
         ...prev, 
-        status: 'processing',
+        status: 'processing' as 'draft' | 'processing' | 'completed' | 'deleted',
         updated_at: new Date().toISOString()
       };
     });
@@ -221,7 +217,7 @@ const ProjectDetail = () => {
       if (!prev) return null;
       return { 
         ...prev, 
-        status: 'draft',
+        status: 'draft' as 'draft' | 'processing' | 'completed' | 'deleted',
         updated_at: new Date().toISOString()
       };
     });
@@ -248,7 +244,7 @@ const ProjectDetail = () => {
         if (!prev) return null;
         return {
           ...prev,
-          status: 'draft',
+          status: 'draft' as 'draft' | 'processing' | 'completed' | 'deleted',
           updated_at: new Date().toISOString()
         };
       });
@@ -277,7 +273,7 @@ const ProjectDetail = () => {
       if (!prev) return null;
       return {
         ...prev,
-        status: 'draft',
+        status: 'draft' as 'draft' | 'processing' | 'completed' | 'deleted',
         updated_at: new Date().toISOString()
       };
     });
@@ -304,7 +300,7 @@ const ProjectDetail = () => {
         if (!prev) return null;
         return {
           ...prev,
-          status: 'draft',
+          status: 'draft' as 'draft' | 'processing' | 'completed' | 'deleted',
           updated_at: new Date().toISOString()
         };
       });
