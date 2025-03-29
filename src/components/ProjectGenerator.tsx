@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Project } from "@/types";
 import { useAuth } from "@/context/AuthContext";
