@@ -16,7 +16,7 @@ export function asType<T>(data: unknown): T {
  */
 export function ensureValidStatus(status: string): 'draft' | 'processing' | 'completed' | 'deleted' {
   if (status === 'draft' || status === 'processing' || status === 'completed' || status === 'deleted') {
-    return status as ('draft' | 'processing' | 'completed' | 'deleted');
+    return status as 'draft' | 'processing' | 'completed' | 'deleted';
   }
   return 'draft';
 }
