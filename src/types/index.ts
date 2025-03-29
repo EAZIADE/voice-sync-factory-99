@@ -16,6 +16,8 @@ export interface Project {
   generation_error?: string | null;
   character_controls?: Record<string, any>;
   script?: string;
+  source_content?: string; // Added the source_content property
+  source_type?: string;   // Added the source_type property
 }
 
 export interface Host {

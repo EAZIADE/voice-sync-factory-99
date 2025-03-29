@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Project } from "@/types";
+import { Project } from "@/types/index";
 import { useAuth } from "@/context/AuthContext";
 import { CharacterControlState } from "./CharacterControls";
 import { ContentSource, processContentSource } from "@/utils/contentSourceProcessing";
