@@ -139,9 +139,8 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
       console.log("Project ID:", project.id);
       console.log("Character controls:", characterControls);
       console.log("Selected hosts:", project.selected_hosts);
-      console.log("Session access token:", session.access_token ? "Present" : "Missing");
       
-      // First check if we are authenticated properly and force a session refresh
+      // IMPORTANT: Force a session refresh before making the API call
       const { data: authData, error: authError } = await supabase.auth.refreshSession();
       if (authError || !authData.session) {
         console.error("Auth refresh failed:", authError);

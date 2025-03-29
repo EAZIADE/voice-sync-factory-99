@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { GlassCard, GlassPanel } from "./ui/GlassMorphism";
 import { AnimatedButton } from "./ui/AnimatedButton";
 import CharacterControls, { CharacterControlState } from "./CharacterControls";
@@ -121,7 +121,7 @@ const PodcastPreview = ({
         console.log(`Attempting to get media for project: ${projectId}`);
         
         const videoBlob = await downloadMediaBlob(projectId, 'video');
-        if (videoBlob) {
+        if (videoBlob && videoBlob.size > 0) {
           const videoUrl = URL.createObjectURL(videoBlob);
           console.log("Created local video URL from blob:", videoUrl);
           setLocalMediaUrls(prev => ({ ...prev, video: videoUrl }));
@@ -144,7 +144,7 @@ const PodcastPreview = ({
         }
         
         const audioBlob = await downloadMediaBlob(projectId, 'audio');
-        if (audioBlob) {
+        if (audioBlob && audioBlob.size > 0) {
           const audioUrl = URL.createObjectURL(audioBlob);
           console.log("Created local audio URL from blob:", audioUrl);
           setLocalMediaUrls(prev => ({ ...prev, audio: audioUrl }));
@@ -167,7 +167,7 @@ const PodcastPreview = ({
         }
       } catch (error) {
         console.error("Error loading media for project:", error);
-        toast.error("Media loading failed", {
+        toast("Media loading failed", {
           description: "There was an error loading your podcast media."
         });
       } finally {
@@ -197,7 +197,7 @@ const PodcastPreview = ({
               videoRef.current.src = demoVideoUrl;
               videoRef.current.load();
               
-              toast.error("Video format issue", {
+              toast("Video format issue", {
                 description: "Using demo video as fallback"
               });
               
@@ -208,7 +208,7 @@ const PodcastPreview = ({
                 console.error("Error playing demo video:", demoErr);
                 
                 setMediaType('audio');
-                toast.error("Video playback failed", {
+                toast("Video playback failed", {
                   description: "Switching to audio mode"
                 });
               }
@@ -228,7 +228,7 @@ const PodcastPreview = ({
               audioRef.current.src = demoAudioUrl;
               audioRef.current.load();
               
-              toast.error("Audio format issue", {
+              toast("Audio format issue", {
                 description: "Using demo audio as fallback"
               });
               
@@ -237,7 +237,7 @@ const PodcastPreview = ({
                 setIsPlaying(true);
               } catch (demoErr) {
                 console.error("Error playing demo audio:", demoErr);
-                toast.error("Audio playback failed", {
+                toast("Audio playback failed", {
                   description: "Unable to play any audio content"
                 });
               }
@@ -297,7 +297,7 @@ const PodcastPreview = ({
           videoRef.current.src = demoVideoUrl;
           videoRef.current.load();
           
-          toast.error("Video format issue", {
+          toast("Video format issue", {
             description: "Using demo video as fallback"
           });
         }
@@ -309,7 +309,7 @@ const PodcastPreview = ({
           audioRef.current.src = demoAudioUrl;
           audioRef.current.load();
           
-          toast.error("Audio format issue", {
+          toast("Audio format issue", {
             description: "Using demo audio as fallback"
           });
         }
@@ -556,12 +556,14 @@ const PodcastPreview = ({
     setIsMediaLoading(true);
     
     try {
+      await refreshSession();
+      
       const videoBlob = await downloadMediaBlob(projectId, 'video');
       const audioBlob = await downloadMediaBlob(projectId, 'audio');
       
       const newUrls: {video?: string, audio?: string} = {};
       
-      if (videoBlob) {
+      if (videoBlob && videoBlob.size > 0) {
         newUrls.video = URL.createObjectURL(videoBlob);
         console.log("Created new local video URL:", newUrls.video);
         
@@ -571,7 +573,7 @@ const PodcastPreview = ({
         }
       }
       
-      if (audioBlob) {
+      if (audioBlob && audioBlob.size > 0) {
         newUrls.audio = URL.createObjectURL(audioBlob);
         console.log("Created new local audio URL:", newUrls.audio);
         
@@ -584,17 +586,17 @@ const PodcastPreview = ({
       setLocalMediaUrls(newUrls);
       
       if (Object.keys(newUrls).length > 0) {
-        toast.success("Media reloaded", {
+        toast("Media reloaded", {
           description: "Podcast files have been refreshed"
         });
       } else {
-        toast.warning("Using demo media", {
+        toast("Using demo media", {
           description: "Using built-in demo media as a fallback"
         });
       }
     } catch (error) {
       console.error("Error reloading media:", error);
-      toast.error("Media reload error", {
+      toast("Media reload error", {
         description: "An error occurred. Using demo media instead."
       });
     } finally {
@@ -697,7 +699,7 @@ const PodcastPreview = ({
                   <path d="M21 2v6h-6"></path>
                   <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
                   <path d="M3 22v-6h6"></path>
-                  <path d="M21 12a9 9 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
+                  <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
                 </svg>
                 Reload Media
               </button>
@@ -877,17 +879,17 @@ const PodcastPreview = ({
         </TabsContent>
       </Tabs>
       
-      {(videoError || audioError) && (
+      {status === 'completed' && (videoError || audioError) && (
         <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-          <h3 className="text-sm font-medium text-yellow-800">Media Format Notice</h3>
+          <h3 className="text-sm font-medium text-yellow-800">Media Loading Tips</h3>
           <p className="mt-1 text-xs text-yellow-700">
-            Using built-in demo media for preview. You can still generate your podcast.
+            Your podcast has been generated, but there might be an issue loading the media files.
           </p>
           <ul className="mt-2 text-xs text-yellow-700 list-disc pl-4 space-y-1">
-            <li>The demo media will be used until your podcast is successfully generated</li>
-            <li>Click "Generate Podcast" to create your AI podcast</li>
-            <li>If issues persist, try the "Reload Media" button after generation</li>
+            <li>Click the "Reload Media" button above to try loading your generated podcast again</li>
+            <li>Wait a few more minutes - sometimes media files take time to become available</li>
             <li>Make sure your browser supports MP4 video and MP3 audio formats</li>
+            <li>Check that your browser isn't blocking media content</li>
           </ul>
         </div>
       )}
