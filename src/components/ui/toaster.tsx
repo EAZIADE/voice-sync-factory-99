@@ -1,5 +1,5 @@
 
-import { useToastContext, ToastProvider as ToasterProvider } from "@/hooks/use-toast"
+import { useToastContext } from "@/hooks/use-toast"
 import {
   Toast,
   ToastClose,

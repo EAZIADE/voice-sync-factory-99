@@ -144,8 +144,8 @@ type ToastContextType = {
 
 const ToastContext = React.createContext<ToastContextType>(undefined);
 
-// This should be moved outside of component scope
-let dispatch: React.Dispatch<Action>;
+// Module-level dispatch variable needs proper type initialization
+let dispatch: React.Dispatch<Action> = () => {};
 
 // Provider component that will wrap the app
 export function ToastProvider({
@@ -156,7 +156,9 @@ export function ToastProvider({
   const [state, dispatchAction] = React.useReducer(reducer, toastInitialState);
   
   // Store the dispatch function in our module-level variable so toast functions can use it
-  dispatch = dispatchAction;
+  React.useEffect(() => {
+    dispatch = dispatchAction;
+  }, [dispatchAction]);
 
   return (
     <ToastContext.Provider value={{ state, dispatch: dispatchAction }}>
@@ -166,7 +168,10 @@ export function ToastProvider({
 }
 
 export const useToast = () => {
-  const toast = (props: ToasterToastProps) => {
+  // Make sure we're getting the latest context
+  const context = React.useContext(ToastContext);
+  
+  const toast = React.useCallback((props: ToasterToastProps) => {
     const id = props.id || genId();
 
     dispatch({
@@ -190,13 +195,13 @@ export const useToast = () => {
           toast: { ...props, id },
         }),
     };
-  };
+  }, []);
 
   return {
     toast,
-    dismiss: (toastId?: string) =>
-      dispatch({ type: actionTypes.DISMISS_TOAST, toastId }),
-    toasts: toastInitialState.toasts,
+    dismiss: React.useCallback((toastId?: string) =>
+      dispatch({ type: actionTypes.DISMISS_TOAST, toastId }), []),
+    toasts: context?.state.toasts || toastInitialState.toasts,
   };
 };
 
