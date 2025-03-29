@@ -58,7 +58,7 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
   const handleSourceSelected = async (source: ContentSource) => {
     try {
       if (!user) {
-        toast.error("Not authenticated", {
+        toast("Not authenticated", {
           description: "Please log in to process content"
         });
         return;
@@ -83,13 +83,13 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
         throw error;
       }
       
-      toast.success("Content processed", {
+      toast("Content processed", {
         description: "Your content has been processed and is ready for podcast generation"
       });
       
     } catch (error) {
       console.error("Error processing content source:", error);
-      toast.error("Processing error", {
+      toast("Processing error", {
         description: "Failed to process content. Please try again."
       });
     } finally {
@@ -99,14 +99,14 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
 
   const handleGeneratePodcast = async () => {
     if (!user || !session || !project.id) {
-      toast.error("Not authenticated", {
+      toast("Not authenticated", {
         description: "Please log in to generate a podcast"
       });
       return;
     }
 
     if (!hasActiveApiKey) {
-      toast.error("API Key Required", {
+      toast("API Key Required", {
         description: "Please add a valid ElevenLabs API key with available character quota in your dashboard settings."
       });
       return;
@@ -114,7 +114,7 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
     
     // Make sure the selected hosts are valid
     if (!project.selected_hosts || project.selected_hosts.length === 0) {
-      toast.error("Host Required", {
+      toast("Host Required", {
         description: "Please select at least one host for your podcast."
       });
       return;
@@ -123,7 +123,7 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
     // Make sure we have a valid session token
     const isValid = await refreshSession();
     if (!isValid) {
-      toast.error("Session expired", {
+      toast("Session expired", {
         description: "Your session has expired. Please log in again."
       });
       return;
@@ -141,46 +141,24 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
       console.log("Selected hosts:", project.selected_hosts);
       console.log("Session access token:", session.access_token ? "Present" : "Missing");
       
-      // First check if we are authenticated properly
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError || !userData.user) {
-        console.error("Auth check failed:", userError);
-        throw new Error("Authentication check failed. Please try logging in again.");
+      // First check if we are authenticated properly and force a session refresh
+      const { data: authData, error: authError } = await supabase.auth.refreshSession();
+      if (authError || !authData.session) {
+        console.error("Auth refresh failed:", authError);
+        throw new Error("Authentication refresh failed. Please try logging in again.");
       }
       
-      // Try the function call using Supabase client first
-      try {
-        const { data, error } = await supabase.functions.invoke('generate-podcast', {
-          body: JSON.stringify({ 
-            projectId: project.id,
-            characterControls
-          }),
-          headers: {
-            Authorization: `Bearer ${session.access_token}`
-          }
-        });
-        
-        if (error) throw error;
-        
-        console.log("Generation response:", data);
-        
-        toast.success("Podcast generation started", {
-          description: "Your AI podcast is being generated. This may take a few minutes."
-        });
-        
-        onGenerateSuccess();
-        return;
-      } catch (fnError) {
-        console.error("Error using supabase.functions.invoke:", fnError);
-        // Fall back to direct fetch if invoke fails
-      }
+      const currentSession = authData.session;
       
-      // Fallback to direct fetch with explicit authentication
+      // Explicitly log the token we're about to use
+      console.log("Using refreshed access token:", currentSession.access_token ? "Present and refreshed" : "Missing after refresh");
+      
+      // Try direct fetch with explicit authentication from the refreshed session
       const response = await fetch(`${supabaseUrl}/functions/v1/generate-podcast`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
+          'Authorization': `Bearer ${currentSession.access_token}`
         },
         body: JSON.stringify({ 
           projectId: project.id,
@@ -211,7 +189,7 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
       const data = await response.json();
       console.log("Generation response:", data);
       
-      toast.success("Podcast generation started", {
+      toast("Podcast generation started", {
         description: "Your AI podcast is being generated. This may take a few minutes."
       });
       
@@ -221,7 +199,7 @@ const ProjectGenerator: React.FC<ProjectGeneratorProps> = ({
       console.error("Error generating podcast:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to generate podcast";
       
-      toast.error("Generation error", {
+      toast("Generation error", {
         description: errorMessage
       });
       
