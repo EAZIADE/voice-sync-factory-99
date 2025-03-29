@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
@@ -13,6 +14,9 @@ import { toast } from "sonner";
 import { asType, convertToAppModel, ensureValidStatus } from "@/utils/typeUtils";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+
+// Define the status type to match the Project interface
+type ProjectStatus = 'draft' | 'processing' | 'completed' | 'deleted';
 
 const ProjectDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -199,7 +203,7 @@ const ProjectDetail = () => {
       if (!prev) return null;
       return { 
         ...prev, 
-        status: 'processing' as const,
+        status: 'processing' as ProjectStatus,
         updated_at: new Date().toISOString()
       };
     });
@@ -217,7 +221,7 @@ const ProjectDetail = () => {
       if (!prev) return null;
       return { 
         ...prev, 
-        status: 'draft' as const,
+        status: 'draft' as ProjectStatus,
         updated_at: new Date().toISOString()
       };
     });
@@ -244,7 +248,7 @@ const ProjectDetail = () => {
         if (!prev) return null;
         return {
           ...prev,
-          status: 'draft' as const,
+          status: 'draft' as ProjectStatus,
           updated_at: new Date().toISOString()
         };
       });
@@ -273,7 +277,7 @@ const ProjectDetail = () => {
       if (!prev) return null;
       return {
         ...prev,
-        status: 'draft' as const,
+        status: 'draft' as ProjectStatus,
         updated_at: new Date().toISOString()
       };
     });
@@ -300,7 +304,7 @@ const ProjectDetail = () => {
         if (!prev) return null;
         return {
           ...prev,
-          status: 'draft' as const,
+          status: 'draft' as ProjectStatus,
           updated_at: new Date().toISOString()
         };
       });
