@@ -14,9 +14,9 @@ export function asType<T>(data: unknown): T {
 /**
  * Ensure a project status is one of the valid options
  */
-export function ensureValidStatus(status: string): 'draft' | 'processing' | 'completed' {
-  if (status === 'draft' || status === 'processing' || status === 'completed') {
-    return status as ('draft' | 'processing' | 'completed');
+export function ensureValidStatus(status: string): 'draft' | 'processing' | 'completed' | 'deleted' {
+  if (status === 'draft' || status === 'processing' || status === 'completed' || status === 'deleted') {
+    return status as ('draft' | 'processing' | 'completed' | 'deleted');
   }
   return 'draft';
 }
